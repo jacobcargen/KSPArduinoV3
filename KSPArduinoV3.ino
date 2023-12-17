@@ -1,0 +1,1505 @@
+/*
+ Name:		Kerbal_Controller_Arduino rev2.0
+ Created:	4/19/2023 4:14:14 PM
+ Author:	Jacob Cargen
+ Copyright: Jacob Cargen
+*/
+
+
+#include "CustomSettings.h"
+#include "Output.h"
+#include "Input.h"
+#include <PayloadStructs.h>
+#include <KerbalSimpitMessageTypes.h>
+#include <KerbalSimpit.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+struct actionGroups
+{
+public:
+    bool isStage;
+    bool isAbort;
+    bool isSAS;
+    bool isRCS;
+    bool isLights;
+    bool isGear;
+    bool isBrake;
+};
+enum infoModes
+{
+
+};
+// Degree character for the lcd
+const char DEGREE_CHAR_LCD = 223;
+
+#pragma region Ksp Simpit
+
+// Create insatance of Simpit
+KerbalSimpit mySimpit(Serial);
+
+resourceMessage liquidFuelMsg;
+resourceMessage liquidFuelStageMsg;
+resourceMessage oxidizerMsg;
+resourceMessage oxidizerStageMsg;
+resourceMessage solidFuelMsg;
+resourceMessage solidFuelStageMsg;
+resourceMessage xenonGasMsg;
+resourceMessage xenonGasStageMsg;
+resourceMessage monopropellantMsg;
+resourceMessage evaMonopropellantMsg;
+resourceMessage electricityMsg;
+resourceMessage oreMsg;
+resourceMessage ablatorMsg;
+resourceMessage ablatorStageMsg;
+CustomResourceMessage customResource1Msg;
+altitudeMessage altitudeMsg;
+velocityMessage velocityMsg;
+airspeedMessage airspeedMsg;
+apsidesMessage apsidesMsg;
+apsidesTimeMessage apsidesTimeMsg;
+maneuverMessage maneuverMsg;
+SASInfoMessage sasInfoMsg;
+orbitInfoMessage orbitInfoMsg;
+vesselPointingMessage vesselPointingMsg;
+// Custom
+actionGroups ag;
+deltaVMessage deltaVMsg;
+deltaVEnvMessage deltaVEnvMsg;
+burnTimeMessage burnTimeMsg;
+cagStatusMessage cagStatusMsg;
+tempLimitMessage tempLimitMsg;
+targetMessage targetMsg;
+// Custom
+String soi = "";
+flightStatusMessage flightStatusMsg;
+atmoConditionsMessage atmoConditionsMsg;
+
+#pragma endregion
+
+bool tempBeep;
+bool geeBeep;
+bool pitchBeep;
+bool altBeep;
+
+byte COMMS_WARNING_THRESHOLD = 50; // 50%
+int LOW_ALTITUDE_WARNING_THRESHOLD = 10000; // Warning light turns solid if below this altitude in meters
+byte HIGH_GEE_WARNING_SOLID_THRESHOLD = 5; // 5G
+byte HIGH_GEE_WARNING_BLINKING_THRESHOLD = 7; // 7G
+byte HIGH_TEMP_WARNING_SOLID_THRESHOLD = 50; // 50%
+byte HIGH_TEMP_WARNING_BLINKING_THRESHOLD = 75; // 75%
+
+const byte TEST_LED = 53;
+const byte TEST_BUTTON = 52;
+
+float PERCISION_MODIFIER = 0.5;
+bool translationHold = false;
+bool rotationHold = false;
+
+
+
+void setup()
+{
+    Output.setPowerLED(true);
+
+    pinMode(TEST_LED, OUTPUT);
+    pinMode(TEST_BUTTON, INPUT_PULLUP);
+
+
+    //Input.init();
+    Output.init();
+
+    // Open up the serial port
+    Serial.begin(115200);
+    // Wait for a connection to ksp
+    while (!mySimpit.init());
+    // Show that the controller has connected
+    mySimpit.printToKSP("KSP Controller Connected!", PRINT_TO_SCREEN);
+    // Register a method for receiving simpit messages from ksp
+    mySimpit.inboundHandler(myCallbackHandler);
+    // Register the simpit channels
+    registerSimpitChannels();
+    
+}
+
+// the loop function runs over and over again until power down or reset
+void loop()
+{
+    // Update simpit
+    mySimpit.update();
+
+    updateAllChecks();
+    
+}
+
+
+#pragma region Ksp Simpit
+
+/// <summary>Info from ksp.</summary>
+void myCallbackHandler(byte messageType, byte msg[], byte msgSize)
+{
+    switch (messageType)
+    {
+    case LF_MESSAGE:
+        if (msgSize == sizeof(resourceMessage))
+            liquidFuelMsg = parseMessage<resourceMessage>(msg);
+        break;
+    case LF_STAGE_MESSAGE:
+        if (msgSize == sizeof(resourceMessage))
+            liquidFuelStageMsg = parseMessage<resourceMessage>(msg);
+        break;
+    case OX_MESSAGE:
+        if (msgSize == sizeof(resourceMessage))
+            oxidizerMsg = parseMessage<resourceMessage>(msg);
+        break;
+    case OX_STAGE_MESSAGE:
+        if (msgSize == sizeof(resourceMessage))
+            oxidizerStageMsg = parseMessage<resourceMessage>(msg);
+        break;
+    case SF_MESSAGE:
+        if (msgSize == sizeof(resourceMessage))
+            solidFuelMsg = parseMessage<resourceMessage>(msg);
+        break;
+    case SF_STAGE_MESSAGE:
+        if (msgSize == sizeof(resourceMessage))
+            solidFuelStageMsg = parseMessage<resourceMessage>(msg);
+        break;
+    case XENON_GAS_MESSAGE:
+        if (msgSize == sizeof(resourceMessage))
+            xenonGasMsg = parseMessage<resourceMessage>(msg);
+        break;
+    case XENON_GAS_STAGE_MESSAGE:
+        if (msgSize == sizeof(resourceMessage))
+            xenonGasStageMsg = parseMessage<resourceMessage>(msg);
+        break;
+    case MONO_MESSAGE:
+        if (msgSize == sizeof(resourceMessage))
+            monopropellantMsg = parseMessage<resourceMessage>(msg);
+        break;
+    case EVA_MESSAGE:
+        if (msgSize == sizeof(resourceMessage))
+            evaMonopropellantMsg = parseMessage<resourceMessage>(msg);
+        break;
+        // MONO_STAGE_MESSAGE ???
+    case ELECTRIC_MESSAGE:
+        if (msgSize == sizeof(resourceMessage))
+            electricityMsg = parseMessage<resourceMessage>(msg);
+        break;
+        // ELECTRIC_STAGE_MESSAGE ???
+    case ORE_MESSAGE:
+        if (msgSize == sizeof(resourceMessage))
+            oreMsg = parseMessage<resourceMessage>(msg);
+        break;
+    case AB_MESSAGE:
+        if (msgSize == sizeof(resourceMessage))
+            ablatorMsg = parseMessage<resourceMessage>(msg);
+        break;
+    case AB_STAGE_MESSAGE:
+        if (msgSize == sizeof(resourceMessage))
+            ablatorStageMsg = parseMessage<resourceMessage>(msg);
+        break;
+    case CUSTOM_RESOURCE_1_MESSAGE:
+        if (msgSize == sizeof(CustomResourceMessage))
+            customResource1Msg = parseCustomResource(msg);
+        break;
+    case ALTITUDE_MESSAGE:
+        if (msgSize == sizeof(altitudeMessage))
+            altitudeMsg = parseAltitude(msg);
+        break;
+    case VELOCITY_MESSAGE:
+        if (msgSize == sizeof(velocityMessage))
+            velocityMsg = parseMessage<velocityMessage>(msg);
+        break;
+    case AIRSPEED_MESSAGE:
+        if (msgSize == sizeof(airspeedMessage))
+            airspeedMsg = parseAirspeed(msg);
+        break;
+    case APSIDES_MESSAGE:
+        if (msgSize == sizeof(apsidesMessage))
+            apsidesMsg = parseApsides(msg);
+        break;
+    case APSIDESTIME_MESSAGE:
+        if (msgSize == sizeof(apsidesTimeMessage))
+            apsidesTimeMsg = parseApsidesTime(msg);
+        break;
+    case MANEUVER_MESSAGE:
+        if (msgSize == sizeof(maneuverMessage))
+            maneuverMsg = parseManeuver(msg);
+        break;
+    case SAS_MODE_INFO_MESSAGE:
+        if (msgSize == sizeof(SASInfoMessage))
+            sasInfoMsg = parseSASInfoMessage(msg);
+        break;
+    case ORBIT_MESSAGE:
+        if (msgSize == sizeof(orbitInfoMessage))
+            orbitInfoMsg = parseOrbitInfo(msg);
+        break;
+    case ROTATION_DATA_MESSAGE:
+        if (msgSize == sizeof(vesselPointingMessage))
+            vesselPointingMsg = parseMessage<vesselPointingMessage>(msg);
+        break;
+    case ACTIONSTATUS_MESSAGE:
+        if (msgSize == 1)
+        {
+            byte current = msg[0];
+
+            // Stage
+            if (current & STAGE_ACTION)
+            {
+                ag.isStage = true;
+            }
+            else
+            {
+                ag.isStage = false;
+            }
+            // Abort
+            if (current & ABORT_ACTION)
+            {
+                ag.isAbort = true;
+            }
+            else
+            {
+                ag.isAbort = false;
+            }
+            // SAS
+            if (current & SAS_ACTION)
+            {
+                ag.isSAS = true;
+            }
+            else
+            {
+                ag.isSAS = false;
+            }
+            // RCS
+            if (current & RCS_ACTION)
+            {
+                ag.isRCS = true;
+            }
+            else
+            {
+                ag.isRCS = false;
+            }
+            // Gear
+            if (current & GEAR_ACTION)
+            {
+                ag.isGear = true;
+            }
+            else
+            {
+                ag.isGear = false;
+            }
+            // Lights
+            if (current & LIGHT_ACTION)
+            {
+                ag.isLights = true;
+            }
+            else
+            {
+                ag.isLights = false;
+            }
+            // Brakes
+            if (current & BRAKES_ACTION)
+            {
+                ag.isBrake = true;
+            }
+            else
+            {
+                ag.isBrake = false;
+            }
+        }
+        break;
+    case DELTAV_MESSAGE:
+        if (msgSize == sizeof(deltaVMessage))
+        {
+            deltaVMsg = parseDeltaV(msg);
+        }
+        break;
+    case DELTAVENV_MESSAGE:
+        if (msgSize == sizeof(deltaVEnvMessage))
+        {
+            deltaVEnvMsg = parseDeltaVEnv(msg);
+        }
+        break;
+    case BURNTIME_MESSAGE:
+        if (msgSize == sizeof(burnTimeMessage))
+        {
+            burnTimeMsg = parseBurnTime(msg);
+        }
+        break;
+    case CAGSTATUS_MESSAGE:
+        if (msgSize == sizeof(cagStatusMessage))
+        {
+            cagStatusMsg = parseCAGStatusMessage(msg);
+        }
+        break;
+    case TEMP_LIMIT_MESSAGE:
+        if (msgSize == sizeof(tempLimitMessage))
+        {
+            tempLimitMsg = parseTempLimitMessage(msg);
+        }
+        break;
+    case TARGETINFO_MESSAGE:
+        if (msgSize == sizeof(targetMessage))
+        {
+            targetMsg = parseTarget(msg);
+        }
+        break;
+    case SOI_MESSAGE: // WIP
+        soi = (char*)msg;
+        //soi[msgSize] = '\0'; 
+        soi[soi.length()] = '\0';
+        mySimpit.printToKSP("SOI:'" + soi + "'", PRINT_TO_SCREEN);
+        break;
+    case SCENE_CHANGE_MESSAGE:
+
+        break;
+    case FLIGHT_STATUS_MESSAGE:
+        if (msgSize == sizeof(flightStatusMessage))
+        {
+            flightStatusMsg = parseFlightStatusMessage(msg);
+        }
+        break;
+    case ATMO_CONDITIONS_MESSAGE:
+        if (msgSize == sizeof(atmoConditionsMessage))
+        {
+            atmoConditionsMsg = parseMessage<atmoConditionsMessage>(msg);
+        }
+    case VESSEL_NAME_MESSAGE:
+
+        break;
+    default:
+        break;
+    }
+}
+
+/// <summary>Register all the needed channels for receiving simpit messages.</summary>
+void registerSimpitChannels()
+{
+    // Resources
+    mySimpit.registerChannel(LF_MESSAGE);
+    mySimpit.registerChannel(LF_STAGE_MESSAGE);
+    mySimpit.registerChannel(OX_MESSAGE);
+    mySimpit.registerChannel(OX_STAGE_MESSAGE);
+    mySimpit.registerChannel(SF_MESSAGE);
+    mySimpit.registerChannel(SF_STAGE_MESSAGE);
+    mySimpit.registerChannel(XENON_GAS_MESSAGE);
+    mySimpit.registerChannel(XENON_GAS_STAGE_MESSAGE);
+    mySimpit.registerChannel(MONO_MESSAGE);
+    mySimpit.registerChannel(EVA_MESSAGE);
+    mySimpit.registerChannel(ELECTRIC_MESSAGE);
+    mySimpit.registerChannel(ORE_MESSAGE);
+    mySimpit.registerChannel(AB_MESSAGE);
+    mySimpit.registerChannel(AB_STAGE_MESSAGE);
+    mySimpit.registerChannel(CUSTOM_RESOURCE_1_MESSAGE);
+    // Flight Data
+    mySimpit.registerChannel(ALTITUDE_MESSAGE);
+    mySimpit.registerChannel(VELOCITY_MESSAGE);
+    mySimpit.registerChannel(AIRSPEED_MESSAGE);
+    mySimpit.registerChannel(APSIDES_MESSAGE);
+    mySimpit.registerChannel(APSIDESTIME_MESSAGE);
+    mySimpit.registerChannel(MANEUVER_MESSAGE);
+    mySimpit.registerChannel(SAS_MODE_INFO_MESSAGE);
+    mySimpit.registerChannel(ORBIT_MESSAGE);
+    mySimpit.registerChannel(ROTATION_DATA_MESSAGE);
+    mySimpit.registerChannel(ACTIONSTATUS_MESSAGE);
+    mySimpit.registerChannel(DELTAV_MESSAGE);
+    mySimpit.registerChannel(DELTAVENV_MESSAGE);
+    mySimpit.registerChannel(BURNTIME_MESSAGE);
+    mySimpit.registerChannel(CAGSTATUS_MESSAGE);
+    mySimpit.registerChannel(TEMP_LIMIT_MESSAGE);
+    mySimpit.registerChannel(TARGETINFO_MESSAGE);
+    mySimpit.registerChannel(SOI_MESSAGE);
+    mySimpit.registerChannel(SCENE_CHANGE_MESSAGE);
+    mySimpit.registerChannel(FLIGHT_STATUS_MESSAGE);
+    mySimpit.registerChannel(ATMO_CONDITIONS_MESSAGE);
+    mySimpit.registerChannel(VESSEL_NAME_MESSAGE);
+}
+
+#pragma endregion
+
+void updateAllChecks()
+{
+
+    // Misc
+    if (Input.getDebugSwitch())
+    {
+    }
+    if (Input.getSoundSwitch())
+    {
+    }
+    if (Input.getInputEnableButton())
+    {
+
+    }
+    // Warnings
+    setTempWarningCancel();
+    setGeeWarningCancel();
+    setWarpWarningCancel();
+    setBrakeWarningCancel();
+    setSASWarningCancel();
+    setRCSWarningCancel();
+    setGearWarningCancel();
+    setCommsWarningCancel();
+    setAltWarningCancel();
+    setPitchWarningCancel();
+    // Display
+    setInfoMode();
+    setDirectionMode();
+    setVerticalVelocity();
+    setReferenceMode();
+    setRadarAlt();
+    // Resources
+    setLFLEDs();
+    setSFLEDs();
+    setOXLEDs();
+    setMPLEDs();
+    setECLEDs();
+    // Display
+    setSpeedLCD();
+    setAltitufeLCD();
+    setDirectionLCD();
+    setHeadingLCD();
+    setInfoLCD();
+    // Action Groups
+    setCAG();
+    setStage();
+    setAbort();
+    setLights();
+    setGear();
+    setBrake();
+    // Custom
+    setDocking();
+    setPercision();
+    // View
+    setScreenshot();
+    setUI();
+    setNav();
+    setView();
+    setFocus();
+    setCamMode();
+    setCamReset();
+    // Warping
+    setWarp();
+    setPause();
+    // SAS & RCS
+    setSAS();
+    setRCS();
+    setAllSASModes();
+    // EVA controls
+    setBoard();
+    setGrab();
+    setJump();
+    // Send throttle to ksp
+    setThrottle();
+    // Send translation to ksp
+    setTranslation();
+    setTranslationHold();
+    // Send rotation to ksp
+    setRotation();
+    setRotationHold();
+}
+
+void setDirectionMode()
+{
+    switch (Input.getDirectionMode()) {}
+}
+void setInfoMode()
+{
+    switch (Input.getInfoMode()) {}
+}
+void setReferenceMode()
+{
+    if (Input.getReferenceModeButton())
+        mySimpit.cycleNavBallMode();
+}
+void setRadarAlt()
+{
+    if (Input.getRadarAltitudeSwitch())
+    {
+
+    }
+}
+
+// Warning Cancel
+void setPitchWarningCancel()
+{
+    if (Input.getPitchWarningButton()) {}
+}
+void setAltWarningCancel()
+{
+    if (Input.getAltWarningButton()) {}
+}
+void setCommsWarningCancel()
+{
+    if (Input.getCommsWarningButton()) {}
+}
+void setGearWarningCancel()
+{
+    if (Input.getGearWarningButton()) {}
+}
+void setRCSWarningCancel()
+{
+    if (Input.getRCSWarningButton()) {}
+}
+void setSASWarningCancel()
+{
+    if (Input.getSASWarningButton()) {}
+}
+void setBrakeWarningCancel()
+{
+    if (Input.getBrakeWarningButton()) {}
+}
+void setWarpWarningCancel()
+{
+    if (Input.getWarpWarningButton()) {}
+}
+void setGeeWarningCancel()
+{
+    if (Input.getGeeWarningButton()) {}
+}
+void setTempWarningCancel()
+{
+    if (Input.getTempWarningButton()) {}
+}
+// Warnings
+void setTempWarning()
+{
+    if (tempLimitMsg.tempLimitPercentage > HIGH_TEMP_WARNING_BLINKING_THRESHOLD)
+    {
+        bool state = blinker1.getState();
+        Output.setTempWarningLED(state);
+        setSpeaker(true, TEMP_WARNING);
+    }
+    else if (tempLimitMsg.tempLimitPercentage > HIGH_TEMP_WARNING_SOLID_THRESHOLD)
+    {
+        // Toggle on
+        Output.setTempWarningLED(true);
+        setSpeaker(false, TEMP_WARNING);
+    }
+    else
+    {
+        // Toggle off
+        Output.setTempWarningLED(false);
+        setSpeaker(false, TEMP_WARNING);
+    }
+}
+void setGeeWarning()
+{
+    if (airspeedMsg.gForces > HIGH_GEE_WARNING_BLINKING_THRESHOLD || airspeedMsg.gForces < -HIGH_GEE_WARNING_BLINKING_THRESHOLD)
+    {
+        bool state = blinker1.getState();
+        Output.setGeeWarningLED(state);
+        setSpeaker(true, GEE_WARNING);
+    }
+    else if (airspeedMsg.gForces > HIGH_GEE_WARNING_SOLID_THRESHOLD || airspeedMsg.gForces < -HIGH_GEE_WARNING_SOLID_THRESHOLD)
+    {
+        Output.setGeeWarningLED(true);
+        setSpeaker(false, GEE_WARNING);
+    }
+    else
+    {
+        Output.setGeeWarningLED(false);
+        setSpeaker(false, GEE_WARNING);
+    }
+}
+void setWarpWarning()
+{
+    if (flightStatusMsg.currentTWIndex > 1)
+    {
+        Output.setWarpWarningLED(true);
+    }
+    else
+    {
+        Output.setWarpWarningLED(false);
+    }
+}
+void setCommsWarning()
+{
+    if (flightStatusMsg.commNetSignalStrenghPercentage < COMMS_WARNING_THRESHOLD)
+    {
+        Output.setCommsWarningLED(true);
+    }
+    else
+    {
+        Output.setCommsWarningLED(false);
+    }
+}
+void setAltWarning()
+{
+    if (altitudeMsg.surface < LOW_ALTITUDE_WARNING_THRESHOLD)
+    {
+        Output.setAltWarningLED(true);
+    }
+    else
+    {
+        Output.setAltWarningLED(false);
+    }
+}
+void setPitchWarning()
+{
+
+}
+// Display
+void setSpeedLCD()
+{
+    // Speed
+    int speed;
+    // Clear the strings
+    String topTxt = "";
+    String botTxt = "";
+    // Check the current speed mode to use and set the values for that mode
+    switch (currentSpeedMode)
+    {
+    case SPEED_SURFACE_MODE:
+        speed = velocityMsg.surface;
+        topTxt += "Surface";
+        break;
+    case SPEED_ORBIT_MODE:
+        speed = velocityMsg.orbital;
+        topTxt += "Orbit";
+        break;
+    case SPEED_TARGET_MODE:
+        speed = targetMsg.velocity;
+        topTxt += "Target";
+        break;
+    case SPEED_VERTICAL_MODE:
+        speed = velocityMsg.vertical;
+        topTxt += "Vertical";
+        break;
+    default:
+        break;
+    }
+    // Speed txt
+    botTxt += "SPD ";
+    // Speed
+    botTxt += formatNumber(speed, 9, false, false);
+    // Add unit measurement
+    botTxt += "m/s";
+
+    Output.setSpeedLCD(topTxt, botTxt);
+}
+void setAltitufeLCD()
+{
+    // Alt
+    int altitude;
+    // Clear the strings
+    String topTxt = "";
+    String botTxt = "";
+    // Calculate gap for soi name
+    // No SOI names are more than 7 char, which is good because that is the exact amount of room at max on the lcd.
+    topTxt += calculateGap("", 7);//soi, 7);
+    // Check altitude mode
+    if (!Input.getRadarAltitudeSwitch()) // SEA
+    {
+        topTxt += "      Sea";
+        altitude = altitudeMsg.sealevel;
+    }
+    else // LAND
+    {
+        topTxt += "     Land";
+        altitude = altitudeMsg.surface;
+    }
+    // Alt txt
+    botTxt += "ALT";
+    if (altitude >= 1000000)
+    {
+        altitude = getKilometers(altitude);
+        botTxt += formatNumber(altitude, 12, true, false);
+        botTxt += "k";
+    }
+    else
+    {
+        botTxt += formatNumber(altitude, 12, true, false);
+        botTxt += "m";
+    }
+    Output.setAltitudeLCD(topTxt, botTxt);
+}
+void setInfoLCD()
+{
+    // Just do this last..
+}
+void setHeadingLCD()
+{
+    String topTxt = "";
+    String botTxt = "";
+
+    topTxt += "Heading "; // DO like a north,east,wesst,south here instead of "Heading "
+    // Heading txt
+    topTxt += " HDG+";
+    topTxt += formatNumber(vesselPointingMsg.heading, 3, false, false);
+    topTxt += DEGREE_CHAR_LCD;
+    // Pitch txt
+    botTxt += "PTH";
+    botTxt += formatNumber(vesselPointingMsg.pitch, 3, true, false);
+    botTxt += DEGREE_CHAR_LCD;
+    // Roll txt
+    botTxt += " RLL";
+    botTxt += formatNumber(vesselPointingMsg.roll, 4, true, true);
+    botTxt += DEGREE_CHAR_LCD;
+
+    Output.setHeadingLCD(topTxt, botTxt);
+}
+void setDirectionLCD()
+{
+    // Clear the strings
+    String topTxt = "";
+    String botTxt = "";
+    // Gap after the mode name
+    String gap = "    "; // Default gap
+    // Declare the values
+    int hdg, pth; // No need for roll
+    // Check for which mode the use and set the values for that mode
+
+    // REMOVE ME WHEN DONE
+    topTxt += "MVR";
+    hdg = maneuverMsg.headingNextManeuver;
+    pth = maneuverMsg.pitchNextManeuver;
+
+    /*
+    switch (currentDirectionMode)
+    {
+    case DIRECTION_MANEUVER_MODE:
+        topTxt += "MVR";
+        hdg = maneuverMsg.headingNextManeuver;
+        pth = maneuverMsg.pitchNextManeuver;
+        break;
+    case DIRECTION_PROGRADE_MODE:
+        topTxt += "PGD";
+        hdg = ;
+        pth = ;
+        break;
+    case DIRECTION_RETROGRADE_MODE:
+        topTxt += "RGD";
+        hdg = ;
+        pth = ;
+        break;
+    case DIRECTION_NORMAL_MODE:
+        topTxt += "NOR";
+        hdg = ;
+        pth = ;
+        break;
+    case DIRECTION_ANTI_NORMAL_MODE:
+        topTxt += "A-NOR";
+        hdg = ;
+        pth = ;
+        gap = "  ";
+        break;
+    case DIRECTION_RADIAL_IN_MODE:
+        topTxt += "RAD";
+        hdg = ;
+        pth = ;
+        break;
+    case DIRECTION_RADIAL_OUT_MODE:
+        topTxt += "A-RAD";
+        hdg = ;
+        pth = ;
+        gap = "  ";
+        break;
+    case DIRECTION_TARGET_MODE:
+        topTxt += "TAR";
+        hdg = ;
+        pth = ;
+        break;
+    case DIRECTION_ANTI_TARGET_MODE:
+        topTxt += "A-TAR";
+        hdg = ;
+        pth = ;
+        gap = "  ";
+        break;
+    default:
+        break;
+    }
+    */
+    // Gap
+    topTxt += gap;
+    // Heading txt
+    topTxt += " HDG+";
+    topTxt += formatNumber(hdg, 3, false, false);
+    topTxt += DEGREE_CHAR_LCD;
+    // Pitch txt
+    botTxt += "PTH";
+    botTxt += formatNumber(pth, 3, true, false);
+    botTxt += DEGREE_CHAR_LCD;
+
+    Output.setDirectionLCD(topTxt, botTxt);
+}
+// Resouces
+void setLFLEDs()
+{
+    byte percentFull;
+    // Normal
+    if (!Input.getStageViewSwitch())
+    {
+        percentFull = getPercent(liquidFuelMsg.total, liquidFuelMsg.available);
+    }
+    // Stage View
+    else
+    {
+        percentFull = getPercent(liquidFuelStageMsg.total, liquidFuelStageMsg.available);
+    }
+    bool newLEDs[20];
+    byte amt = (byte)PercentageToValue(20, percentFull);
+    for (int i = amt; i >= 0; i--)
+    {
+        newLEDs[i] = true;
+    }
+    Output.setLiquidFuelLEDs(newLEDs);
+}
+void setSFLEDs()
+{
+
+
+    byte percentFull;
+    // Normal
+    if (!Input.getStageViewSwitch())
+    {
+        percentFull = getPercent(solidFuelMsg.total, solidFuelMsg.available);
+    }
+    // Stage View
+    else
+    {
+        percentFull = getPercent(solidFuelStageMsg.total, solidFuelStageMsg.available);
+    }
+    bool newLEDs[20];
+    byte amt = (byte)PercentageToValue(20, percentFull);
+    //mySimpit.printToKSP((String)solidFuelMsg.total, PRINT_TO_SCREEN);
+    //mySimpit.printToKSP((String)solidFuelMsg.available, PRINT_TO_SCREEN);
+    //mySimpit.printToKSP((String)amt, PRINT_TO_SCREEN);
+    //mySimpit.printToKSP("---------------------", PRINT_TO_SCREEN);
+
+    for (int i = amt; i >= 0; i--)
+    {
+        newLEDs[i] = true;
+    }
+    Output.setSolidFuelLEDs(newLEDs);
+}
+void setOXLEDs()
+{
+    byte percentFull;
+    // Normal
+    if (!Input.getStageViewSwitch())
+    {
+        percentFull = getPercent(oxidizerMsg.total, oxidizerMsg.available);
+    }
+    // Stage View
+    else
+    {
+        percentFull = getPercent(oxidizerStageMsg.total, oxidizerStageMsg.available);
+    }
+    bool newLEDs[20];
+    byte amt = (byte)PercentageToValue(20, percentFull);
+    for (int i = amt; i >= 0; i--)
+    {
+        newLEDs[i] = true;
+    }
+    Output.setOxidizerLEDs(newLEDs);
+}
+void setMPLEDs()
+{
+    byte percentFull;
+    // EVA mp
+    if (flightStatusMsg.isInEVA())
+    {
+        percentFull = getPercent(evaMonopropellantMsg.total, evaMonopropellantMsg.available);
+    }
+    // Stage View
+    else
+    {
+        // Always shows all monopropellant available
+        percentFull = getPercent(monopropellantMsg.total, monopropellantMsg.available);
+    }
+    bool newLEDs[20];
+    byte amt = (byte)PercentageToValue(20, percentFull);
+    for (int i = amt; i >= 0; i--)
+    {
+        newLEDs[i] = true;
+    }
+    Output.setMonopropellantLEDs(newLEDs);
+}
+void setECLEDs()
+{
+    byte percentFull;
+    // Always shows all electricity available
+    percentFull = getPercent(electricityMsg.total, electricityMsg.available);
+    bool newLEDs[20];
+    byte amt = (byte)PercentageToValue(20, percentFull);
+    for (int i = amt; i >= 0; i--)
+    {
+        newLEDs[i] = true;
+    }
+    Output.setElectricityLEDs(newLEDs);
+}
+// Other action groups
+void setStage()
+{
+    // Staging
+    if (!Input.getStageLockSwitch())
+    {
+        Output.setStageLED(true);
+        if (Input.getStageButton())
+            mySimpit.activateAction(STAGE_ACTION);
+    }
+    else
+        Output.setStageLED(false);
+}
+void setAbort()
+{
+    // Aborting
+    if (!Input.getAbortLockSwitch())
+    {
+        Output.setAbortLED(true);
+        if (Input.getAbortButton())
+            mySimpit.activateAction(ABORT_ACTION);
+    }
+    else
+        Output.setAbortLED(false);
+}
+void setLights()
+{
+    if (Input.getLightsSwitch())
+        mySimpit.activateAction(LIGHT_ACTION);
+    else
+        mySimpit.deactivateAction(LIGHT_ACTION);
+}
+void setGear()
+{
+    if (Input.getGearSwitch())
+        mySimpit.activateAction(GEAR_ACTION);
+    else
+        mySimpit.deactivateAction(GEAR_ACTION);
+}
+void setBrake()
+{
+    if (Input.getBrakeSwitch())
+        mySimpit.activateAction(BRAKES_ACTION);
+    else
+        mySimpit.deactivateAction(BRAKES_ACTION);
+    if (ag.isBrake)
+        Output.setBrakeWarningLED(true);
+    else
+        Output.setBrakeWarningLED(false);
+}
+// Custom
+void setPercision()
+{
+    if (Input.getPercisionSwitch())
+        percisionModifier = 0.5;
+    else
+        percisionModifier = 1.0;
+}
+void setDocking()
+{
+    if (Input.getDockingSwitch())
+    {
+    }
+    else
+    {
+    }
+}
+// Custom action groups
+void setCAG()
+{
+    // Custom Action Groups
+    if (Input.getCAG1())
+        mySimpit.toggleCAG(1);
+    if (Input.getCAG2())
+        mySimpit.toggleCAG(2);
+    if (Input.getCAG3())
+        mySimpit.toggleCAG(3);
+    if (Input.getCAG4())
+        mySimpit.toggleCAG(4);
+    if (Input.getCAG5())
+        mySimpit.toggleCAG(5);
+    if (Input.getCAG6())
+        mySimpit.toggleCAG(6);
+    if (Input.getCAG7())
+        mySimpit.toggleCAG(7);
+    if (Input.getCAG8())
+        mySimpit.toggleCAG(8);
+    if (Input.getCAG9())
+        mySimpit.toggleCAG(9);
+    if (Input.getCAG10())
+        mySimpit.toggleCAG(10);
+
+    if (cagStatusMsg.is_action_activated(cagStatusMsg.status[0]))
+        Output.setCAG1LED(true);
+    else
+        Output.setCAG1LED(false);
+    if (cagStatusMsg.is_action_activated(cagStatusMsg.status[1]))
+        Output.setCAG2LED(true);
+    else
+        Output.setCAG2LED(false);
+    if (cagStatusMsg.is_action_activated(cagStatusMsg.status[2]))
+        Output.setCAG3LED(true);
+    else
+        Output.setCAG3LED(false);
+    if (cagStatusMsg.is_action_activated(cagStatusMsg.status[3]))
+        Output.setCAG4LED(true);
+    else
+        Output.setCAG4LED(false);
+    if (cagStatusMsg.is_action_activated(cagStatusMsg.status[4]))
+        Output.setCAG5LED(true);
+    else
+        Output.setCAG5LED(false);
+    if (cagStatusMsg.is_action_activated(cagStatusMsg.status[5]))
+        Output.setCAG6LED(true);
+    else
+        Output.setCAG6LED(false);
+    if (cagStatusMsg.is_action_activated(cagStatusMsg.status[6]))
+        Output.setCAG7LED(true);
+    else
+        Output.setCAG7LED(false);
+    if (cagStatusMsg.is_action_activated(cagStatusMsg.status[7]))
+        Output.setCAG8LED(true);
+    else
+        Output.setCAG8LED(false);
+    if (cagStatusMsg.is_action_activated(cagStatusMsg.status[8]))
+        Output.setCAG9LED(true);
+    else
+        Output.setCAG9LED(false);
+    if (cagStatusMsg.is_action_activated(cagStatusMsg.status[9]))
+        Output.setCAG10LED(true);
+    else
+        Output.setCAG10LED(false);
+}
+// View
+void setCamReset()
+{
+    if (Input.getCamResetButton())
+    {
+        mySimpit.setCameraMode(FLIGHT_CAMERA_AUTO);
+    }
+}
+void setCamMode()
+{
+    if (Input.getCamModeButton())
+    {
+        mySimpit.setCameraMode(CAMERA_NEXT_MODE);
+    }
+}
+void setFocus()
+{
+    if (Input.getFocusButton()) {}
+}
+void setView()
+{
+    if (Input.getViewSwitch())
+    {
+        // External
+
+    }
+    else
+    {
+        // Internal (IVA)
+    }
+}
+void setNav()
+{
+    if (Input.getNavSwitch())
+    {
+
+    }
+}
+void setUI()
+{
+    if (Input.getUISwitch()) {}
+}
+void setScreenshot()
+{
+    if (Input.getScreenshotButton()) {}
+}
+void setVerticalVelocity()
+{
+    if (Input.getVerticalVelocitySwitch())
+    {
+        if (!Input.getVerticalVelocitySwitch())
+        {
+            if (currentSpeedMode + 1 == SPEED_VERTICAL_MODE)
+            {
+                if (currentSpeedMode + 1 >= sizeof(SpeedModes))
+                {
+                    currentSpeedMode = 0;
+                }
+                else
+                {
+                    currentSpeedMode += 2;
+                }
+            }
+            else
+            {
+                // Next speed mode
+                if (currentSpeedMode == sizeof(SpeedModes) - 1)
+                {
+                    currentSpeedMode = 0;
+                }
+                else
+                {
+                    currentSpeedMode++;
+                }
+            }
+        }
+        else // Vertical Velocity
+        {
+            currentSpeedMode = SPEED_VERTICAL_MODE;
+        }
+    }
+
+}
+// Warping & Pause
+void setWarp()
+{
+    timewarpMessage twMsg;
+
+    if (!Input.getWarpLockSwitch() || Input.getCancelWarpButton())
+    {
+        twMsg.command = TIMEWARP_X1;
+        mySimpit.send(TIMEWARP_MESSAGE, twMsg);
+        return;
+    }
+
+    if (Input.getPhysWarpSwitch())
+    {
+        // NOT IMPLEMENTED IN KspSimPit!!!
+    }
+
+    if (Input.getIncreaseWarpButton()) 
+    {
+        twMsg.command = TIMEWARP_UP;
+        mySimpit.send(TIMEWARP_MESSAGE, twMsg);
+        return;
+    }
+    if (Input.getDecreaseWarpButton()) 
+    {
+        twMsg.command = TIMEWARP_DOWN;
+        mySimpit.send(TIMEWARP_MESSAGE, twMsg);
+        return;
+    }
+}
+void setPause()
+{
+    if (Input.getPauseButton()) 
+    {
+        
+    }
+}
+// SAS & RCS
+void setSAS()
+{
+    if (Input.getSASSwitch())
+        mySimpit.activateAction(SAS_ACTION);
+    else
+        mySimpit.deactivateAction(SAS_ACTION);
+    if (ag.isSAS)
+        Output.setSASWarningLED(true);
+    else
+        Output.setSASWarningLED(false);
+}
+void setRCS()
+{
+    if (Input.getRCSSwitch())
+        mySimpit.activateAction(RCS_ACTION);
+    else
+        mySimpit.deactivateAction(RCS_ACTION);
+    if (ag.isRCS)
+        Output.setRCSWarningLED(true);
+    else
+        Output.setRCSWarningLED(false);
+}
+void setAllSASModes()
+{
+    // SAS Modes
+    if (Input.getSASStabilityAssistButton())
+        setSASMode(AP_STABILITYASSIST);
+    if (Input.getSASManeuverButton())
+        setSASMode(AP_MANEUVER);
+    if (Input.getSASProgradeButton())
+        setSASMode(AP_PROGRADE);
+    if (Input.getSASRetrogradeButton())
+        setSASMode(AP_RETROGRADE);
+    if (Input.getSASNormalButton())
+        setSASMode(AP_NORMAL);
+    if (Input.getSASAntiNormalButton())
+        setSASMode(AP_ANTINORMAL);
+    if (Input.getSASRadialInButton())
+        setSASMode(AP_RADIALIN);
+    if (Input.getSASRadialOutButton())
+        setSASMode(AP_RADIALOUT);
+    if (Input.getSASTargetButton())
+        setSASMode(AP_TARGET);
+    if (Input.getSASAntiTargetButton())
+        setSASMode(AP_ANTITARGET);
+
+    switch (sasInfoMsg.currentSASMode)
+    {
+        Output.setSASStabilityAssistLED(false);
+        Output.setSASManeuverLED(false);
+        Output.setSASProgradeLED(false);
+        Output.setSASRetrogradeLED(false);
+        Output.setSASNormalLED(false);
+        Output.setSASAntiNormalLED(false);
+        Output.setSASRadialInLED(false);
+        Output.setSASRadialOutLED(false);
+        Output.setSASTargetLED(false);
+        Output.setSASAntiTargetLED(false);
+
+    case AP_STABILITYASSIST:
+        Output.setSASStabilityAssistLED(true);
+        break;
+    case AP_PROGRADE:
+        Output.setSASProgradeLED(true);
+        break;
+    case AP_RETROGRADE:
+        Output.setSASRetrogradeLED(true);
+        break;
+    case AP_NORMAL:
+        Output.setSASNormalLED(true);
+        break;
+    case AP_ANTINORMAL:
+        Output.setSASAntiNormalLED(true);
+        break;
+    case AP_RADIALIN:
+        Output.setSASRadialInLED(true);
+        break;
+    case AP_RADIALOUT:
+        Output.setSASRadialOutLED(true);
+        break;
+    case AP_TARGET:
+        Output.setSASTargetLED(true);
+        break;
+    case AP_ANTITARGET:
+        Output.setSASAntiTargetLED(true);
+        break;
+    case AP_MANEUVER:
+        Output.setSASManeuverLED(true);
+        break;
+    default:
+        break;
+    }
+}
+void setSASMode(AutopilotMode mode)
+{
+    // Make sure this mode is available
+    if (sasInfoMsg.SASModeAvailability != mode)
+        return;
+    // Set to this mode
+    mySimpit.setSASMode(mode);
+}
+// EVA controls
+void setJump()
+{
+    if (Input.getJumpButton()) {}
+}
+void setGrab()
+{
+    if (Input.getGrabButton()) {}
+}
+void setBoard()
+{
+    if (Input.getBoardButton()) {}
+}
+// Throttle
+void setThrottle()
+{
+    int axis = 0;
+    axis = Input.getThrottleAxis();
+    // Smooth and map the raw input
+    int16_t throttle = 0;
+    // If toggled on
+    if (!Input.getThrottleLockSwitch())
+        throttle = smoothAndMapAxis(axis);
+
+    // Create new throttle msg
+    throttleMessage throttleMsg;
+    // Set values in msg
+    throttleMsg.throttle = throttle;
+    // Send msg
+    mySimpit.send(THROTTLE_MESSAGE, throttleMsg);
+}
+// Translation
+void setTranslation()
+{
+    if (translationReset)
+        translationHold = false;
+    if (translationHold)
+        return;
+    int x, y, z;
+    x = Input.getTranslationXAxis();
+    y = Input.getTranslationYAxis();
+    z = Input.getTranslationZAxis();
+
+    if (Input.getPercisionSwitch())
+    {
+        x *= PERCISION_MODIFIER;
+        y *= PERCISION_MODIFIER;
+        z *= PERCISION_MODIFIER;
+    }
+
+    // Smoothing and mapping
+    int16_t transX = smoothAndMapAxis(x);
+    int16_t transY = smoothAndMapAxis(y);
+    int16_t transZ = smoothAndMapAxis(z);
+    // Creating and setting values for msg
+    translationMessage transMsg;
+    transMsg.setXYZ(transX, transZ, transY);
+    // Send msg to ksp
+    mySimpit.send(TRANSLATION_MESSAGE, transMsg);
+}
+void setTranslationHold()
+{
+    if (Input.getTransHoldButton())
+        translationHold = true;
+    else
+        translationHold = false;
+}
+// Rotation
+void setRotation()
+{
+
+    int x, y, z;
+    x = Input.getRotationXAxis();
+    y = Input.getRotationYAxis();
+    z = Input.getRotationZAxis();
+
+    if (Input.getPercisionSwitch())
+    {
+        x *= PERCISION_MODIFIER;
+        y *= PERCISION_MODIFIER;
+        z *= PERCISION_MODIFIER;
+    }
+
+    if (Input.getEnableLookButton())
+    {
+        // Look around instead
+
+        return;
+    }
+
+    if (rotationReset)
+        translationHold = false;
+    if (translationHold)
+        return;
+
+
+    // Smoothing and mapping
+    int16_t rotX = smoothAndMapAxis(x);
+    int16_t rotY = smoothAndMapAxis(y);
+    int16_t rotZ = smoothAndMapAxis(z);
+    // Flip some values the right way
+    rotX *= -1;
+    // Creating and setting values for msg
+    rotationMessage rotMsg;
+    rotMsg.setPitchRollYaw(rotY, rotX, rotZ);
+    // Send msg to ksp
+    mySimpit.send(ROTATION_MESSAGE, rotMsg);
+}
+void setRotationHold()
+{
+    if (Input.getRotHoldButton())
+        rotationHold = true;
+    else
+        rotationHold = false;
+}
+
+
+#pragma region Tools
+
+/// <summary>Give the raw analog some smoothing.</summary>
+/// <returns>Returns a smoothed and mapped value.</returns>
+int16_t smoothAndMapAxis(int raw)
+{
+    // Smooth the raw input (NO SMOOTHING YET)
+    int smooth = raw;
+    // Map the smoothed data for simpit
+    int16_t mappedAndSmoothed = map(smooth, 0, 1023, INT16_MIN, INT16_MAX);
+    // Return the smoothed mapped data
+    return mappedAndSmoothed;
+}
+
+
+/// <summary>Format numbers for lcd. Length max is 16 characters.This will fit a number to a character range,
+/// the number will be to the right of the excess characters. 
+/// The excess will become zeros (to the left of the number)</summary>
+/// <returns>Returns a formated number at a specific length.</returns>
+String formatNumber(int number, byte lengthReq, bool canBeNegative, bool flipNegative)
+{
+    // Makes the number a positive
+    int num = abs(number);
+    // Check if the number is negative 
+    bool isNegative = number < 0 ? true : false;
+    // If should flip the polarity, Does not flip if the number is a zero (fix for causing zero to go negative)
+    if (flipNegative && number != 0) isNegative = !isNegative;
+    // Check length
+    if (num < 10) lengthReq -= 1; // 1 characters
+    else if (num < 100) lengthReq -= 2; // 2 characters
+    else if (num < 1000) lengthReq -= 3; // 3 characters
+    else if (num < 10000) lengthReq -= 4; // 4 characters
+    else if (num < 100000) lengthReq -= 5; // 5 characters
+    else if (num < 1000000) lengthReq -= 6; // 6 characters
+    else if (num < 10000000) lengthReq -= 7; // 7 characters
+    else if (num < 100000000) lengthReq -= 8; // 8 characters
+    else if (num < 1000000000) lengthReq -= 9; // 9 characters
+    else if (num < 10000000000) lengthReq -= 10; // 10 characters
+    else if (num < 100000000000) lengthReq -= 11; // 11 characters
+    else if (num < 1000000000000) lengthReq -= 12; // 12 characters
+    else if (num < 10000000000000) lengthReq -= 13; // 13 characters
+    else if (num < 100000000000000) lengthReq -= 14; // 14 characters
+    else if (num < 1000000000000000) lengthReq -= 15; // 15 characters
+    else if (num < 10000000000000000) lengthReq -= 16; // 16 characters
+
+    String str;
+    for (size_t i = 0; i < lengthReq; i++)
+    {
+        if (canBeNegative)
+        {
+            if (i == 0 && isNegative) str += "-";
+            else if (i == 0 && !isNegative) str += "+";
+            else str += "0";
+        }
+        else str += "0";
+    }
+
+    return str + (String)num;
+}
+/// <summary>Calculate a gap. The txt length cannot be more than the ideal length.</summary>
+String calculateGap(String includedTxt, int idealLength)
+{
+    // Calculate gap
+    int gap = idealLength - includedTxt.length();
+    if (gap < 0) return "";
+    String str;
+    for (size_t i = 0; i < gap; i++)
+    {
+        str += " ";
+    }
+    return includedTxt + str;
+}
+/// <summary>Input meters and receive it converted and rounded into kilos.</summary>
+/// <param name="meters"></param>
+/// <returns>Meters rounded into kilometers.</returns>
+int getKilometers(int meters)
+{
+    // Convert
+    int km = meters / 1000;
+    // Round and return
+    return round(km);
+}
+
+/// <summary>
+/// Find a vertain value using the percentage of a number.
+/// </summary>
+/// <param name="total">Number to find value.</param>
+/// <param name="percentage">Percentage of the total.</param>
+/// <returns>Returns the value, percentage is of total.</returns>
+double PercentageToValue(double total, double percentage)
+{
+    double newNum = (total / 100) * percentage;
+    return newNum;
+}
+/// <summary>Get the percent val is of total.</summary>
+/// <returns>Percentage</returns>
+byte getPercent(int total, int val)
+{
+    return (val / total) * 100;
+}
+
+#pragma endregion
