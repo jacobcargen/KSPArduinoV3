@@ -126,13 +126,10 @@ void _shiftIn(int dataA, int clockEnableA, int clockA, int loadA,
 
 #pragma region Public
 
-InputClass::InputClass()
-{
-
-}
 
 void InputClass::init()
 {
+    
     // Shift register pins
     pinMode(SHIFT_IN_A_SERIAL_PIN, INPUT);
     pinMode(SHIFT_IN_A_CLOCK_PIN, OUTPUT);

@@ -14,7 +14,6 @@
 	#include "arduino.h"
 	#include <pins_arduino.h> 
 	#include <variant.h> 
-	#include <variant.cpp> 
 	#include <LiquidCrystal_I2C.h>
 #else
 	#include "WProgram.h"
@@ -52,11 +51,11 @@ public:
 
 	// Displays
 
-	void setSpeedLCD(char top[16], char bot[16]);
-	void setAltitudeLCD(char top[16], char bot[16]);
-	void setHeadingLCD(char top[16], char bot[16]);
-	void setDirectionLCD(char top[16], char bot[16]);
-	void setInfoLCD(char top[16], char bot[16]);
+	void setSpeedLCD(String top, String bot);
+	void setAltitudeLCD(String top, String bot);
+	void setHeadingLCD(String top, String bot);
+	void setDirectionLCD(String top, String bot);
+	void setInfoLCD(String top, String bot);
 
 	// Resources
 

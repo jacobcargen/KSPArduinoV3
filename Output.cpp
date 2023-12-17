@@ -238,27 +238,27 @@ void OutputClass::setPitchWarningLED(bool state)
 
 // Displays
 
-void OutputClass::setSpeedLCD(char top[16], char bot[16])
+void OutputClass::setSpeedLCD(String top, String bot)
 {
     _speedLCDTopTxt = top;
     _speedLCDBotTxt = bot;
 }
-void OutputClass::setAltitudeLCD(char top[16], char bot[16])
+void OutputClass::setAltitudeLCD(String top, String bot)
 {
     _altitudeLCDTopTxt = top;
     _altitudeLCDBotTxt = bot;
 }
-void OutputClass::setHeadingLCD(char top[16], char bot[16])
+void OutputClass::setHeadingLCD(String top, String bot)
 {
     _headingLCDTopTxt = top;
     _headingLCDBotTxt = bot;
 }
-void OutputClass::setDirectionLCD(char top[16], char bot[16])
+void OutputClass::setDirectionLCD(String top, String bot)
 {
     _directionLCDTopTxt = top;
     _directionLCDBotTxt = bot;
 }
-void OutputClass::setInfoLCD(char top[16], char bot[16])
+void OutputClass::setInfoLCD(String top, String bot)
 {
     _infoLCDTopTxt = top;
     _infoLCDBotTxt = bot;

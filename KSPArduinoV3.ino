@@ -100,14 +100,8 @@ bool rotationHold = false;
 
 void setup()
 {
-    Output.setPowerLED(true);
 
-    pinMode(TEST_LED, OUTPUT);
-    pinMode(TEST_BUTTON, INPUT_PULLUP);
-
-
-    //Input.init();
-    Output.init();
+    
 
     // Open up the serial port
     Serial.begin(115200);
@@ -119,7 +113,17 @@ void setup()
     mySimpit.inboundHandler(myCallbackHandler);
     // Register the simpit channels
     registerSimpitChannels();
-    
+
+    //print("KSP Controller Connected");
+
+    Output.setPowerLED(true);
+
+    pinMode(TEST_LED, OUTPUT);
+    pinMode(TEST_BUTTON, INPUT_PULLUP);
+
+
+    //Input.init();
+    Output.init();
 }
 
 // the loop function runs over and over again until power down or reset
@@ -128,10 +132,15 @@ void loop()
     // Update simpit
     mySimpit.update();
 
-    updateAllChecks();
+    //updateAllChecks();
     
 }
-
+/*
+void print(String x) 
+{ 
+    Serial.println(x); 
+}
+*/
 
 #pragma region Ksp Simpit
 
@@ -469,7 +478,6 @@ void updateAllChecks()
     setBrake();
     // Custom
     setDocking();
-    setPercision();
     // View
     setScreenshot();
     setUI();
@@ -564,6 +572,7 @@ void setTempWarningCancel()
 // Warnings
 void setTempWarning()
 {
+    /*
     if (tempLimitMsg.tempLimitPercentage > HIGH_TEMP_WARNING_BLINKING_THRESHOLD)
     {
         bool state = blinker1.getState();
@@ -582,9 +591,11 @@ void setTempWarning()
         Output.setTempWarningLED(false);
         setSpeaker(false, TEMP_WARNING);
     }
+    */
 }
 void setGeeWarning()
 {
+    /*
     if (airspeedMsg.gForces > HIGH_GEE_WARNING_BLINKING_THRESHOLD || airspeedMsg.gForces < -HIGH_GEE_WARNING_BLINKING_THRESHOLD)
     {
         bool state = blinker1.getState();
@@ -601,6 +612,7 @@ void setGeeWarning()
         Output.setGeeWarningLED(false);
         setSpeaker(false, GEE_WARNING);
     }
+    */
 }
 void setWarpWarning()
 {
@@ -642,6 +654,7 @@ void setPitchWarning()
 // Display
 void setSpeedLCD()
 {
+    /*
     // Speed
     int speed;
     // Clear the strings
@@ -677,9 +690,11 @@ void setSpeedLCD()
     botTxt += "m/s";
 
     Output.setSpeedLCD(topTxt, botTxt);
+    */
 }
 void setAltitufeLCD()
 {
+    /*
     // Alt
     int altitude;
     // Clear the strings
@@ -713,6 +728,7 @@ void setAltitufeLCD()
         botTxt += "m";
     }
     Output.setAltitudeLCD(topTxt, botTxt);
+    */
 }
 void setInfoLCD()
 {
@@ -720,6 +736,7 @@ void setInfoLCD()
 }
 void setHeadingLCD()
 {
+    /*
     String topTxt = "";
     String botTxt = "";
 
@@ -738,9 +755,11 @@ void setHeadingLCD()
     botTxt += DEGREE_CHAR_LCD;
 
     Output.setHeadingLCD(topTxt, botTxt);
+    */
 }
 void setDirectionLCD()
 {
+    /*
     // Clear the strings
     String topTxt = "";
     String botTxt = "";
@@ -755,7 +774,7 @@ void setDirectionLCD()
     hdg = maneuverMsg.headingNextManeuver;
     pth = maneuverMsg.pitchNextManeuver;
 
-    /*
+    
     switch (currentDirectionMode)
     {
     case DIRECTION_MANEUVER_MODE:
@@ -809,7 +828,7 @@ void setDirectionLCD()
     default:
         break;
     }
-    */
+    
     // Gap
     topTxt += gap;
     // Heading txt
@@ -822,6 +841,7 @@ void setDirectionLCD()
     botTxt += DEGREE_CHAR_LCD;
 
     Output.setDirectionLCD(topTxt, botTxt);
+    */
 }
 // Resouces
 void setLFLEDs()
@@ -980,13 +1000,6 @@ void setBrake()
         Output.setBrakeWarningLED(false);
 }
 // Custom
-void setPercision()
-{
-    if (Input.getPercisionSwitch())
-        percisionModifier = 0.5;
-    else
-        percisionModifier = 1.0;
-}
 void setDocking()
 {
     if (Input.getDockingSwitch())
@@ -1110,6 +1123,7 @@ void setScreenshot()
 }
 void setVerticalVelocity()
 {
+    /*
     if (Input.getVerticalVelocitySwitch())
     {
         if (!Input.getVerticalVelocitySwitch())
@@ -1143,7 +1157,7 @@ void setVerticalVelocity()
             currentSpeedMode = SPEED_VERTICAL_MODE;
         }
     }
-
+    */
 }
 // Warping & Pause
 void setWarp()
@@ -1318,7 +1332,7 @@ void setThrottle()
 // Translation
 void setTranslation()
 {
-    if (translationReset)
+    if (Input.getTransResetButton())
         translationHold = false;
     if (translationHold)
         return;
@@ -1374,7 +1388,7 @@ void setRotation()
         return;
     }
 
-    if (rotationReset)
+    if (Input.getRotResetButton())
         translationHold = false;
     if (translationHold)
         return;

@@ -14,7 +14,6 @@
 	#include "arduino.h"
 	#include <pins_arduino.h> 
 	#include <variant.h> 
-	#include <variant.cpp> 
 #else
 	#include "WProgram.h"
 #endif

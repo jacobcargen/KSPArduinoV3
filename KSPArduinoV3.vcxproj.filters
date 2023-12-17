@@ -34,11 +34,11 @@
     <Filter Include="src\_micro-api-readonly\libraries\KerbalSimpit">
       <UniqueIdentifier>{b847649e-c5a7-4a09-af04-ba8329e5ca34}</UniqueIdentifier>
     </Filter>
-    <Filter Include="src\_micro-api-readonly\libraries\Wire">
-      <UniqueIdentifier>{29af212e-129e-4618-a9d6-fe75345b50de}</UniqueIdentifier>
-    </Filter>
     <Filter Include="src\_micro-api-readonly\libraries\Arduino-LiquidCrystal-I2C-library-master">
       <UniqueIdentifier>{c7de9f00-0c51-4c1b-8df0-ea016b2c581d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\_micro-api-readonly\libraries\Wire">
+      <UniqueIdentifier>{3d8a66c7-cd83-446c-9332-ce4781ba79c3}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -51,11 +51,11 @@
     <None Include="..\..\..\Documents\Arduino\libraries\KerbalSimpit\library.properties">
       <Filter>src\_micro-api-readonly\libraries\KerbalSimpit</Filter>
     </None>
-    <None Include="..\..\..\AppData\Local\arduino15\packages\arduino\hardware\sam\1.6.12\libraries\Wire\library.properties">
-      <Filter>src\_micro-api-readonly\libraries\Wire</Filter>
-    </None>
     <None Include="..\..\..\Documents\Arduino\libraries\Arduino-LiquidCrystal-I2C-library-master\library.properties">
       <Filter>src\_micro-api-readonly\libraries\Arduino-LiquidCrystal-I2C-library-master</Filter>
+    </None>
+    <None Include="..\..\..\AppData\Local\arduino15\packages\arduino\hardware\sam\1.6.12\libraries\Wire\library.properties">
+      <Filter>src\_micro-api-readonly\libraries\Wire</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
@@ -162,11 +162,11 @@
     <ClCompile Include="..\..\..\Documents\Arduino\libraries\KerbalSimpit\src\PayloadStructs.cpp">
       <Filter>src\_micro-api-readonly\libraries\KerbalSimpit</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\AppData\Local\arduino15\packages\arduino\hardware\sam\1.6.12\libraries\Wire\src\Wire.cpp">
-      <Filter>src\_micro-api-readonly\libraries\Wire</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\..\Documents\Arduino\libraries\Arduino-LiquidCrystal-I2C-library-master\LiquidCrystal_I2C.cpp">
       <Filter>src\_micro-api-readonly\libraries\Arduino-LiquidCrystal-I2C-library-master</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\AppData\Local\arduino15\packages\arduino\hardware\sam\1.6.12\libraries\Wire\src\Wire.cpp">
+      <Filter>src\_micro-api-readonly\libraries\Wire</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -305,11 +305,11 @@
     <ClInclude Include="..\..\..\Documents\Arduino\libraries\KerbalSimpit\src\PayloadStructs.h">
       <Filter>src\_micro-api-readonly\libraries\KerbalSimpit</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\AppData\Local\arduino15\packages\arduino\hardware\sam\1.6.12\libraries\Wire\src\Wire.h">
-      <Filter>src\_micro-api-readonly\libraries\Wire</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\..\Documents\Arduino\libraries\Arduino-LiquidCrystal-I2C-library-master\LiquidCrystal_I2C.h">
       <Filter>src\_micro-api-readonly\libraries\Arduino-LiquidCrystal-I2C-library-master</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\AppData\Local\arduino15\packages\arduino\hardware\sam\1.6.12\libraries\Wire\src\Wire.h">
+      <Filter>src\_micro-api-readonly\libraries\Wire</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -322,11 +322,11 @@
     <Text Include="..\..\..\Documents\Arduino\libraries\KerbalSimpit\extras\docs\requirements.txt">
       <Filter>src\_micro-api-readonly\libraries\KerbalSimpit</Filter>
     </Text>
-    <Text Include="..\..\..\AppData\Local\arduino15\packages\arduino\hardware\sam\1.6.12\libraries\Wire\keywords.txt">
-      <Filter>src\_micro-api-readonly\libraries\Wire</Filter>
-    </Text>
     <Text Include="..\..\..\Documents\Arduino\libraries\Arduino-LiquidCrystal-I2C-library-master\keywords.txt">
       <Filter>src\_micro-api-readonly\libraries\Arduino-LiquidCrystal-I2C-library-master</Filter>
+    </Text>
+    <Text Include="..\..\..\AppData\Local\arduino15\packages\arduino\hardware\sam\1.6.12\libraries\Wire\keywords.txt">
+      <Filter>src\_micro-api-readonly\libraries\Wire</Filter>
     </Text>
   </ItemGroup>
 </Project>
