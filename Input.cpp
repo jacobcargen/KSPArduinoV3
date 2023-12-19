@@ -6,6 +6,8 @@
 */
 
 #include "Input.h"
+#include <pins_arduino.h> 
+#include <variant.h> 
 
 
 #pragma region Private

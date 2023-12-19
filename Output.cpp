@@ -6,6 +6,9 @@
 */
 
 #include "Output.h"
+#include <pins_arduino.h> 
+#include <variant.h> 
+#include <LiquidCrystal_I2C.h>
 
 
 #pragma region Shift Out Variables
@@ -21,9 +24,9 @@ int const _SHIFT_OUT_C_LATCH_PIN = 9;
 int const _SHIFT_OUT_C_CLOCK_PIN = 10;
 
 // Shift out pins
-bool _shiftOutA[64];
-bool _shiftOutB[64];
-bool _shiftOutC[16];
+bool _shiftOutA[64] = { 0 };
+bool _shiftOutB[64] = { 0 };
+bool _shiftOutC[16] = { 0 };
 
 #pragma endregion
 
@@ -55,35 +58,45 @@ String _directionLCDTopTxt, _directionLCDBotTxt;
 
 #pragma region Private Methods
 
-/// <summary>Updates a shift register group. (MSBFIRST) (MAX OF 64 pins)</summary>
-void _sendShiftOut(bool states[], int dataPin, int latchPin, int clockPin)
+void _sendShiftOut(bool states[], int size, int dataPin, int latchPin, int clockPin)
 {
-    // Define outputA (4bytes)
+    bool statesFlipped[size];
+
+    for (int i = 0; i < size; i++)
+    {
+        statesFlipped[i] = states[size - i - 1];
+    }
+
+
+    // Define outputA (4 bytes)
     unsigned long outputA = 0;
-    // Define outputB (4bytes)
+    // Define outputB (4 bytes)
     unsigned long outputB = 0;
+
     // For each pin/bit
-    for (int pin = 0; pin < sizeof(states); pin++)
+    for (int pin = 0; pin < size; pin++)
     {
         // First 4 bytes
-        if (pin <= 31 && states[pin] == 1)
+        if (pin <= 31 && statesFlipped[pin] == 1)
         {
-            // Set the value for THIS pin/bit to 1
+            // Set the value for THIS pin/bit to 1 in reverse order
             bitSet(outputA, pin);
         }
         // Last 4 bytes
-        else if (states[pin] == 1)
+        else if (statesFlipped[pin] == 1)
         {
-            // Set the value for THIS pin/bit to 1
+            // Set the value for THIS pin/bit to 1 in reverse order
             bitSet(outputB, pin - 32);
         }
     }
-    // Break down the bytes 4-2bytes
+
+    // Break down the bytes 4-2 bytes
     unsigned int b0_1 = int(outputA);
     unsigned int b2_3 = int(outputA >> 16);
     unsigned int b4_5 = int(outputB);
     unsigned int b6_7 = int(outputB >> 16);
-    // Break down the bytes 2-1bytes
+
+    // Break down the bytes 2-1 bytes
     byte b0 = lowByte(b0_1);
     byte b1 = highByte(b0_1);
     byte b2 = lowByte(b2_3);
@@ -92,9 +105,10 @@ void _sendShiftOut(bool states[], int dataPin, int latchPin, int clockPin)
     byte b5 = highByte(b4_5);
     byte b6 = lowByte(b6_7);
     byte b7 = highByte(b6_7);
+
     // Disable
     digitalWrite(latchPin, LOW);
-    // Shift the values into the register starting from the last register
+    // Shift the values into the register starting from the first register
     shiftOut(dataPin, clockPin, MSBFIRST, b7);
     shiftOut(dataPin, clockPin, MSBFIRST, b6);
     shiftOut(dataPin, clockPin, MSBFIRST, b5);
@@ -106,6 +120,8 @@ void _sendShiftOut(bool states[], int dataPin, int latchPin, int clockPin)
     // Enable
     digitalWrite(latchPin, HIGH);
 }
+
+
 /// <summary>
 /// Update the I2C LCD displays.
 /// </summary>
@@ -128,14 +144,33 @@ void _sendLCD(LiquidCrystal_I2C lcd, String line1, String line2)
 
 #pragma region Public Methods
 
-OutputClass::OutputClass()
+void OutputClass::overrideSet(bool x[144])
 {
-
+    for (int i = 0; i < 64; i++)
+    {
+        _shiftOutA[i] = x[i];
+    }
+    for (int i = 0; i < 64; i++)
+    {
+        _shiftOutB[i] = x[i + 64];
+    }
+    for (int i = 0; i < 16; i++)
+    {
+        _shiftOutC[i] = x[i + 80];
+    }
+    
 }
 /// <summary>Initialize the ouotputs for use.</summary>
 void OutputClass::init()
 {
+    bool x[144];
+    for (int i = 0; i < 144; i++)
+    {
+        x[i] = 0;
+    }
+    overrideSet(x);
     // LCDs
+    /*
     _headingLCD.begin();
     _speedLCD.begin();
     _altitudeLCD.begin();
@@ -147,7 +182,7 @@ void OutputClass::init()
     _altitudeLCD.print("ALTITUDE TEST");
     _infoLCD.print("INFO TEST");
     _directionLCD.print("DIRECTION TEST");
-
+    */
     // Shift register pins
     pinMode(_SHIFT_OUT_A_DATA_PIN, OUTPUT);
     pinMode(_SHIFT_OUT_A_LATCH_PIN, OUTPUT);
@@ -159,26 +194,23 @@ void OutputClass::init()
     pinMode(_SHIFT_OUT_C_LATCH_PIN, OUTPUT);
     pinMode(_SHIFT_OUT_C_CLOCK_PIN, OUTPUT);
 
-    for (int i = 0; i < sizeof(_shiftOutA); i++)
-    {
-        _shiftOutA[i] = 0;
-    }
-    _sendShiftOut(_shiftOutA, _SHIFT_OUT_A_DATA_PIN, _SHIFT_OUT_A_LATCH_PIN, _SHIFT_OUT_A_CLOCK_PIN);
+    _sendShiftOut(_shiftOutA, 64, _SHIFT_OUT_A_DATA_PIN, _SHIFT_OUT_A_LATCH_PIN, _SHIFT_OUT_A_CLOCK_PIN);
+    
 }
 /// <summary>Update the controller outputs.</summary>
 void OutputClass::update()
 {
-    _sendLCD(_speedLCD, _speedLCDTopTxt, _speedLCDBotTxt);
-    _sendLCD(_altitudeLCD, _altitudeLCDTopTxt, _altitudeLCDBotTxt);
-    _sendLCD(_headingLCD, _headingLCDTopTxt, _headingLCDBotTxt);
-    _sendLCD(_infoLCD, _infoLCDTopTxt, _infoLCDBotTxt);
-    _sendLCD(_directionLCD, _directionLCDTopTxt, _directionLCDBotTxt);
+    //_sendLCD(_speedLCD, _speedLCDTopTxt, _speedLCDBotTxt);
+    //_sendLCD(_altitudeLCD, _altitudeLCDTopTxt, _altitudeLCDBotTxt);
+    //_sendLCD(_headingLCD, _headingLCDTopTxt, _headingLCDBotTxt);
+    //_sendLCD(_infoLCD, _infoLCDTopTxt, _infoLCDBotTxt);
+    //_sendLCD(_directionLCD, _directionLCDTopTxt, _directionLCDBotTxt);
 
-    _shiftOutB[48] = false;
+    //_shiftOutB[48] = false;
 
-    _sendShiftOut(_shiftOutA, _SHIFT_OUT_A_DATA_PIN, _SHIFT_OUT_A_LATCH_PIN, _SHIFT_OUT_A_CLOCK_PIN);
-    //_sendShiftOut(_shiftOutB, _SHIFT_OUT_B_DATA_PIN, _SHIFT_OUT_B_LATCH_PIN, _SHIFT_OUT_B_CLOCK_PIN);
-    //_sendShiftOut(_shiftOutC, _SHIFT_OUT_C_DATA_PIN, _SHIFT_OUT_C_LATCH_PIN, _SHIFT_OUT_C_CLOCK_PIN);
+    _sendShiftOut(_shiftOutA, 64, _SHIFT_OUT_A_DATA_PIN, _SHIFT_OUT_A_LATCH_PIN, _SHIFT_OUT_A_CLOCK_PIN);
+    //_sendShiftOut(_shiftOutB, 64, _SHIFT_OUT_B_DATA_PIN, _SHIFT_OUT_B_LATCH_PIN, _SHIFT_OUT_B_CLOCK_PIN);
+    //_sendShiftOut(_shiftOutC, 64, _SHIFT_OUT_C_DATA_PIN, _SHIFT_OUT_C_LATCH_PIN, _SHIFT_OUT_C_CLOCK_PIN);
 }
 
 

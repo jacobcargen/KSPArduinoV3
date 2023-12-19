@@ -40,6 +40,9 @@
     <Filter Include="src\_micro-api-readonly\libraries\Wire">
       <UniqueIdentifier>{3d8a66c7-cd83-446c-9332-ce4781ba79c3}</UniqueIdentifier>
     </Filter>
+    <Filter Include="src\_micro-api-readonly\libraries\arduino-timer">
+      <UniqueIdentifier>{588bcc00-d5d7-4f93-b3eb-a4aa29816800}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <None Include="src\arduino folders read me.txt">
@@ -56,6 +59,9 @@
     </None>
     <None Include="..\..\..\AppData\Local\arduino15\packages\arduino\hardware\sam\1.6.12\libraries\Wire\library.properties">
       <Filter>src\_micro-api-readonly\libraries\Wire</Filter>
+    </None>
+    <None Include="..\..\..\Documents\Arduino\libraries\arduino-timer\library.properties">
+      <Filter>src\_micro-api-readonly\libraries\arduino-timer</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
@@ -311,6 +317,12 @@
     <ClInclude Include="..\..\..\AppData\Local\arduino15\packages\arduino\hardware\sam\1.6.12\libraries\Wire\src\Wire.h">
       <Filter>src\_micro-api-readonly\libraries\Wire</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\Documents\Arduino\libraries\arduino-timer\src\arduino-timer.h">
+      <Filter>src\_micro-api-readonly\libraries\arduino-timer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\Documents\Arduino\libraries\arduino-timer\src\timer.h">
+      <Filter>src\_micro-api-readonly\libraries\arduino-timer</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Text Include="..\..\..\Documents\Arduino\libraries\KerbalSimpit\keywords.txt">
@@ -327,6 +339,9 @@
     </Text>
     <Text Include="..\..\..\AppData\Local\arduino15\packages\arduino\hardware\sam\1.6.12\libraries\Wire\keywords.txt">
       <Filter>src\_micro-api-readonly\libraries\Wire</Filter>
+    </Text>
+    <Text Include="..\..\..\Documents\Arduino\libraries\arduino-timer\keywords.txt">
+      <Filter>src\_micro-api-readonly\libraries\arduino-timer</Filter>
     </Text>
   </ItemGroup>
 </Project>

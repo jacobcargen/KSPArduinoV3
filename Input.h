@@ -12,8 +12,6 @@
 
 #if defined(ARDUINO) && ARDUINO >= 100
 	#include "arduino.h"
-	#include <pins_arduino.h> 
-	#include <variant.h> 
 #else
 	#include "WProgram.h"
 #endif

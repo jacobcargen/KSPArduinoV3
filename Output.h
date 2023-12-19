@@ -12,9 +12,6 @@
 
 #if defined(ARDUINO) && ARDUINO >= 100
 	#include "arduino.h"
-	#include <pins_arduino.h> 
-	#include <variant.h> 
-	#include <LiquidCrystal_I2C.h>
 #else
 	#include "WProgram.h"
 #endif
@@ -26,11 +23,10 @@ protected:
 
 public:
 
-	OutputClass();
 	void init();
 	void update();
 
-
+	void overrideSet(bool x[144]);
 	// Misc
 
 	void setPowerLED(bool state);

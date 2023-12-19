@@ -6,6 +6,7 @@
 */
 
 
+#include <arduino-timer.h>
 #include "CustomSettings.h"
 #include "Output.h"
 #include "Input.h"
@@ -96,51 +97,89 @@ float PERCISION_MODIFIER = 0.5;
 bool translationHold = false;
 bool rotationHold = false;
 
+Timer<1> timer;
 
+int lastLoopMillis = 0;
 
+int current = 0;
 void setup()
 {
+    Output.init();
+    Output.setPowerLED(true);
+    print("Output initialization finished.");
 
+    //Input.init();
+    //
+    //
+
+    // SET TEST LED TO OFF
+    pinMode(TEST_LED, OUTPUT);
+    //pinMode(TEST_BUTTON, INPUT_PULLUP);
     
-
     // Open up the serial port
     Serial.begin(115200);
     // Wait for a connection to ksp
+    /*
     while (!mySimpit.init());
     // Show that the controller has connected
     mySimpit.printToKSP("KSP Controller Connected!", PRINT_TO_SCREEN);
     // Register a method for receiving simpit messages from ksp
-    mySimpit.inboundHandler(myCallbackHandler);
+    //mySimpit.inboundHandler(myCallbackHandler);
     // Register the simpit channels
-    registerSimpitChannels();
-
-    //print("KSP Controller Connected");
-
-    Output.setPowerLED(true);
-
-    pinMode(TEST_LED, OUTPUT);
-    pinMode(TEST_BUTTON, INPUT_PULLUP);
-
-
-    //Input.init();
-    Output.init();
+    //registerSimpitChannels();
+    print("KSP Controller Connected");
+    */
+    
+    timer.every(1000, oneSecCalls);
+    // Initialization complete
 }
-
-// the loop function runs over and over again until power down or reset
-void loop()
+bool oneSecCalls(void *)
 {
-    // Update simpit
-    mySimpit.update();
+    //mySimpit.printToKSP("Loop time: " + String(current), PRINT_TO_SCREEN);
+    return true;
+}
+void loop() 
+{
+    // Update output to controller
+    Output.update();
 
-    //updateAllChecks();
+    timer.tick();
+    
+    bool x[144] = {0};
+    for (int i = 0; i < 64; i++)
+    {
+        x[i] = true;
+        Output.overrideSet(x);
+        Output.update();
+        x[i] = false;
+        delay(5);
+    }
+    for (int i = 62; i >= 1; i--)
+    {
+        x[i] = true;
+        Output.overrideSet(x);
+        Output.update();
+        x[i] = false;
+        delay(5);
+    }
+    
+
+    // Get current
+    // Show current - last
+    // update last to current
+    
+    current = millis() - lastLoopMillis;
+    
+    lastLoopMillis = current;
     
 }
-/*
+
+
 void print(String x) 
 { 
     Serial.println(x); 
 }
-*/
+
 
 #pragma region Ksp Simpit
 
@@ -384,6 +423,7 @@ void myCallbackHandler(byte messageType, byte msg[], byte msgSize)
 /// <summary>Register all the needed channels for receiving simpit messages.</summary>
 void registerSimpitChannels()
 {
+    /*
     // Resources
     mySimpit.registerChannel(LF_MESSAGE);
     mySimpit.registerChannel(LF_STAGE_MESSAGE);
@@ -422,6 +462,7 @@ void registerSimpitChannels()
     mySimpit.registerChannel(FLIGHT_STATUS_MESSAGE);
     mySimpit.registerChannel(ATMO_CONDITIONS_MESSAGE);
     mySimpit.registerChannel(VESSEL_NAME_MESSAGE);
+    */
 }
 
 #pragma endregion
