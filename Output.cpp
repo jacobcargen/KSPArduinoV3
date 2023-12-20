@@ -60,14 +60,6 @@ String _directionLCDTopTxt, _directionLCDBotTxt;
 
 void _sendShiftOut(bool states[], int size, int dataPin, int latchPin, int clockPin)
 {
-    bool statesFlipped[size];
-
-    for (int i = 0; i < size; i++)
-    {
-        statesFlipped[i] = states[size - i - 1];
-    }
-
-
     // Define outputA (4 bytes)
     unsigned long outputA = 0;
     // Define outputB (4 bytes)
@@ -77,13 +69,13 @@ void _sendShiftOut(bool states[], int size, int dataPin, int latchPin, int clock
     for (int pin = 0; pin < size; pin++)
     {
         // First 4 bytes
-        if (pin <= 31 && statesFlipped[pin] == 1)
+        if (pin <= 31 && states[pin] == 1)
         {
             // Set the value for THIS pin/bit to 1 in reverse order
             bitSet(outputA, pin);
         }
         // Last 4 bytes
-        else if (statesFlipped[pin] == 1)
+        else if (states[pin] == 1)
         {
             // Set the value for THIS pin/bit to 1 in reverse order
             bitSet(outputB, pin - 32);

@@ -99,9 +99,10 @@ bool rotationHold = false;
 
 Timer<1> timer;
 
-int lastLoopMillis = 0;
+int previousMillis;
 
-int current = 0;
+bool isDebugMode = true;
+
 void setup()
 {
     Output.init();
@@ -112,66 +113,62 @@ void setup()
     //
     //
 
+
+    // Test output leds
+    bool x[144];
+    for (int i = 0; i < 144; i++)
+    {
+        x[i] = true;
+    }
+    Output.overrideSet(x);
+    Output.update();
+    delay(750);
+    for (int i = 0; i < 144; i++)
+    {
+        x[i] = false;
+    }
+    Output.overrideSet(x);
+    Output.update();
+    delay(750);
+
     // SET TEST LED TO OFF
     pinMode(TEST_LED, OUTPUT);
     //pinMode(TEST_BUTTON, INPUT_PULLUP);
-    
+
     // Open up the serial port
     Serial.begin(115200);
+
+
+    print(String(getPercent(1000, 500)));
+
+
     // Wait for a connection to ksp
-    /*
     while (!mySimpit.init());
     // Show that the controller has connected
     mySimpit.printToKSP("KSP Controller Connected!", PRINT_TO_SCREEN);
     // Register a method for receiving simpit messages from ksp
-    //mySimpit.inboundHandler(myCallbackHandler);
+    mySimpit.inboundHandler(myCallbackHandler);
     // Register the simpit channels
-    //registerSimpitChannels();
+    registerSimpitChannels();
     print("KSP Controller Connected");
-    */
-    
-    timer.every(1000, oneSecCalls);
     // Initialization complete
-}
-bool oneSecCalls(void *)
-{
-    //mySimpit.printToKSP("Loop time: " + String(current), PRINT_TO_SCREEN);
-    return true;
 }
 void loop() 
 {
+    // Update simpit
+    mySimpit.update();
+    
+    
+
+    ////// Set things //////
+    
+    setSFLEDs();
+
     // Update output to controller
     Output.update();
 
-    timer.tick();
-    
-    bool x[144] = {0};
-    for (int i = 0; i < 64; i++)
-    {
-        x[i] = true;
-        Output.overrideSet(x);
-        Output.update();
-        x[i] = false;
-        delay(5);
-    }
-    for (int i = 62; i >= 1; i--)
-    {
-        x[i] = true;
-        Output.overrideSet(x);
-        Output.update();
-        x[i] = false;
-        delay(5);
-    }
-    
-
-    // Get current
-    // Show current - last
-    // update last to current
-    
-    current = millis() - lastLoopMillis;
-    
-    lastLoopMillis = current;
-    
+    if (isDebugMode)
+        printHz();
 }
 
 
@@ -180,6 +177,24 @@ void print(String x)
     Serial.println(x); 
 }
 
+void printHz()
+{
+    // Measure the current time
+    unsigned long currentMillis = millis();
+
+    // Calculate the time elapsed since the previous iteration
+    unsigned long elapsedTime = currentMillis - previousMillis;
+
+    // Print the loop rate (inverse of the elapsed time)
+    float loopRate = 1000.0 / elapsedTime;  // Convert to loops per second (Hz)
+    Serial.print("");
+    Serial.print(loopRate);
+    Serial.println(" Hz");
+
+    mySimpit.printToKSP("Loop Rate: " + String(loopRate) + " Hz", PRINT_TO_SCREEN);
+    // Update the previous timestamp for the next iteration
+    previousMillis = currentMillis;
+}
 
 #pragma region Ksp Simpit
 
@@ -423,46 +438,46 @@ void myCallbackHandler(byte messageType, byte msg[], byte msgSize)
 /// <summary>Register all the needed channels for receiving simpit messages.</summary>
 void registerSimpitChannels()
 {
-    /*
+    
     // Resources
-    mySimpit.registerChannel(LF_MESSAGE);
-    mySimpit.registerChannel(LF_STAGE_MESSAGE);
-    mySimpit.registerChannel(OX_MESSAGE);
-    mySimpit.registerChannel(OX_STAGE_MESSAGE);
+    //mySimpit.registerChannel(LF_MESSAGE);
+    //mySimpit.registerChannel(LF_STAGE_MESSAGE);
+    //mySimpit.registerChannel(OX_MESSAGE);
+    //mySimpit.registerChannel(OX_STAGE_MESSAGE);
     mySimpit.registerChannel(SF_MESSAGE);
     mySimpit.registerChannel(SF_STAGE_MESSAGE);
-    mySimpit.registerChannel(XENON_GAS_MESSAGE);
-    mySimpit.registerChannel(XENON_GAS_STAGE_MESSAGE);
-    mySimpit.registerChannel(MONO_MESSAGE);
-    mySimpit.registerChannel(EVA_MESSAGE);
-    mySimpit.registerChannel(ELECTRIC_MESSAGE);
-    mySimpit.registerChannel(ORE_MESSAGE);
-    mySimpit.registerChannel(AB_MESSAGE);
-    mySimpit.registerChannel(AB_STAGE_MESSAGE);
-    mySimpit.registerChannel(CUSTOM_RESOURCE_1_MESSAGE);
-    // Flight Data
-    mySimpit.registerChannel(ALTITUDE_MESSAGE);
-    mySimpit.registerChannel(VELOCITY_MESSAGE);
-    mySimpit.registerChannel(AIRSPEED_MESSAGE);
-    mySimpit.registerChannel(APSIDES_MESSAGE);
-    mySimpit.registerChannel(APSIDESTIME_MESSAGE);
-    mySimpit.registerChannel(MANEUVER_MESSAGE);
-    mySimpit.registerChannel(SAS_MODE_INFO_MESSAGE);
-    mySimpit.registerChannel(ORBIT_MESSAGE);
-    mySimpit.registerChannel(ROTATION_DATA_MESSAGE);
-    mySimpit.registerChannel(ACTIONSTATUS_MESSAGE);
-    mySimpit.registerChannel(DELTAV_MESSAGE);
-    mySimpit.registerChannel(DELTAVENV_MESSAGE);
-    mySimpit.registerChannel(BURNTIME_MESSAGE);
-    mySimpit.registerChannel(CAGSTATUS_MESSAGE);
-    mySimpit.registerChannel(TEMP_LIMIT_MESSAGE);
-    mySimpit.registerChannel(TARGETINFO_MESSAGE);
-    mySimpit.registerChannel(SOI_MESSAGE);
-    mySimpit.registerChannel(SCENE_CHANGE_MESSAGE);
-    mySimpit.registerChannel(FLIGHT_STATUS_MESSAGE);
-    mySimpit.registerChannel(ATMO_CONDITIONS_MESSAGE);
-    mySimpit.registerChannel(VESSEL_NAME_MESSAGE);
-    */
+    //mySimpit.registerChannel(XENON_GAS_MESSAGE);
+    //mySimpit.registerChannel(XENON_GAS_STAGE_MESSAGE);
+    //mySimpit.registerChannel(MONO_MESSAGE);
+    //mySimpit.registerChannel(EVA_MESSAGE);
+    //mySimpit.registerChannel(ELECTRIC_MESSAGE);
+    //mySimpit.registerChannel(ORE_MESSAGE);
+    //mySimpit.registerChannel(AB_MESSAGE);
+    //mySimpit.registerChannel(AB_STAGE_MESSAGE);
+    //mySimpit.registerChannel(CUSTOM_RESOURCE_1_MESSAGE);
+    //// Flight Data
+    //mySimpit.registerChannel(ALTITUDE_MESSAGE);
+    //mySimpit.registerChannel(VELOCITY_MESSAGE);
+    //mySimpit.registerChannel(AIRSPEED_MESSAGE);
+    //mySimpit.registerChannel(APSIDES_MESSAGE);
+    //mySimpit.registerChannel(APSIDESTIME_MESSAGE);
+    //mySimpit.registerChannel(MANEUVER_MESSAGE);
+    //mySimpit.registerChannel(SAS_MODE_INFO_MESSAGE);
+    //mySimpit.registerChannel(ORBIT_MESSAGE);
+    //mySimpit.registerChannel(ROTATION_DATA_MESSAGE);
+    //mySimpit.registerChannel(ACTIONSTATUS_MESSAGE);
+    //mySimpit.registerChannel(DELTAV_MESSAGE);
+    //mySimpit.registerChannel(DELTAVENV_MESSAGE);
+    //mySimpit.registerChannel(BURNTIME_MESSAGE);
+    //mySimpit.registerChannel(CAGSTATUS_MESSAGE);
+    //mySimpit.registerChannel(TEMP_LIMIT_MESSAGE);
+    //mySimpit.registerChannel(TARGETINFO_MESSAGE);
+    //mySimpit.registerChannel(SOI_MESSAGE);
+    //mySimpit.registerChannel(SCENE_CHANGE_MESSAGE);
+    //mySimpit.registerChannel(FLIGHT_STATUS_MESSAGE);
+    //mySimpit.registerChannel(ATMO_CONDITIONS_MESSAGE);
+    //mySimpit.registerChannel(VESSEL_NAME_MESSAGE);
+    
 }
 
 #pragma endregion
@@ -885,6 +900,28 @@ void setDirectionLCD()
     */
 }
 // Resouces
+void setSFLEDs()
+{
+    double percentFull = 0.0;
+    double amt = 0.0;
+    // Normal
+    if (!Input.getStageViewSwitch())
+        percentFull = getPercent(solidFuelMsg.total, solidFuelMsg.available);
+    else
+        percentFull = getPercent(solidFuelStageMsg.total, solidFuelStageMsg.available);
+    amt = 20 - PercentageToValue(20, percentFull);
+
+    bool newLEDs[20];
+    for (int i = 20; i > 0; i--)
+    {
+        if (i >= amt)
+            newLEDs[i] = true;
+        else
+            newLEDs[i] = false;
+    }
+
+    Output.setSolidFuelLEDs(newLEDs);
+}
 void setLFLEDs()
 {
     byte percentFull;
@@ -905,34 +942,6 @@ void setLFLEDs()
         newLEDs[i] = true;
     }
     Output.setLiquidFuelLEDs(newLEDs);
-}
-void setSFLEDs()
-{
-
-
-    byte percentFull;
-    // Normal
-    if (!Input.getStageViewSwitch())
-    {
-        percentFull = getPercent(solidFuelMsg.total, solidFuelMsg.available);
-    }
-    // Stage View
-    else
-    {
-        percentFull = getPercent(solidFuelStageMsg.total, solidFuelStageMsg.available);
-    }
-    bool newLEDs[20];
-    byte amt = (byte)PercentageToValue(20, percentFull);
-    //mySimpit.printToKSP((String)solidFuelMsg.total, PRINT_TO_SCREEN);
-    //mySimpit.printToKSP((String)solidFuelMsg.available, PRINT_TO_SCREEN);
-    //mySimpit.printToKSP((String)amt, PRINT_TO_SCREEN);
-    //mySimpit.printToKSP("---------------------", PRINT_TO_SCREEN);
-
-    for (int i = amt; i >= 0; i--)
-    {
-        newLEDs[i] = true;
-    }
-    Output.setSolidFuelLEDs(newLEDs);
 }
 void setOXLEDs()
 {
@@ -1547,12 +1556,16 @@ int getKilometers(int meters)
 /// <returns>Returns the value, percentage is of total.</returns>
 double PercentageToValue(double total, double percentage)
 {
-    double newNum = (total / 100) * percentage;
-    return newNum;
+    double newNum = ((total / 100) * percentage);
+    if (newNum > total)
+        newNum = total;
+    if (newNum < 0)
+        newNum = 0;
+    return (int)newNum;
 }
 /// <summary>Get the percent val is of total.</summary>
 /// <returns>Percentage</returns>
-byte getPercent(int total, int val)
+double getPercent(double total, double val)
 {
     return (val / total) * 100;
 }

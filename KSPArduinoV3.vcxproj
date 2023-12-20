@@ -219,7 +219,7 @@
   <ImportGroup Label="ExtensionTargets" />
   <ProjectExtensions>
     <VisualStudio>
-      <UserProperties arduino.upload.port="COM3" config.Debug.customdebug_arduino_due_x_dbg_debugger_type="universal" />
+      <UserProperties arduino.upload.port="COM3" config.Debug.customdebug_arduino_due_x_dbg_debugger_type="universal" VM.DebugTextMessages.MessageWindow="0" VM.DebugTextMessages.SerialWindow="0" />
     </VisualStudio>
   </ProjectExtensions>
 </Project>
