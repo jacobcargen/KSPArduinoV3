@@ -1,5 +1,5 @@
 /*
- Name:		Kerbal_Controller_Arduino rev2.0
+ Name:		Kerbal_Controller_Arduino rev3.0
  Created:	4/19/2023 4:14:14 PM
  Author:	Jacob Cargen
  Copyright: Jacob Cargen
@@ -7,8 +7,7 @@
 
 #include "Input.h"
 #include <pins_arduino.h> 
-#include <variant.h> 
-
+#include <variant.h>
 
 #pragma region Private
 
@@ -41,11 +40,12 @@ const int TRANSLATION_BUTTON_PIN = A7;
 // Throttle Axis
 const int THROTTLE_AXIS_PIN = A8;
 
-bool _shiftInA[64];
-bool _shiftInB[16];
+bool _sA[64];
+bool _sB[16];
 
 unsigned long lastDebounceTime = 0;  // the last time the output pin was toggled
 unsigned long debounceDelay = 50;    // the debounce time; increase if the output flickers
+
 
 
 /// <summary>Gets shift register inputs.(MSBFIRST)</summary>
@@ -75,28 +75,28 @@ void _shiftIn(int dataA, int clockEnableA, int clockA, int loadA,
     {
         if (i < 8)
             if (1 == bitRead(inputA[0], i))
-                _shiftInA[i] = 1;
+                _sA[i] = 1;
             else if (i < 16)
                 if (1 == bitRead(inputA[1], i - 8))
-                    _shiftInA[i] = 1;
+                    _sA[i] = 1;
                 else if (i < 24)
                     if (1 == bitRead(inputA[2], i - 16))
-                        _shiftInA[i] = 1;
+                        _sA[i] = 1;
                     else if (i < 32)
                         if (1 == bitRead(inputA[3], i - 24))
-                            _shiftInA[i] = 1;
+                            _sA[i] = 1;
                         else if (i < 40)
                             if (1 == bitRead(inputA[4], i - 32))
-                                _shiftInA[i] = 1;
+                                _sA[i] = 1;
                             else if (i < 48)
                                 if (1 == bitRead(inputA[5], i - 40))
-                                    _shiftInA[i] = 1;
+                                    _sA[i] = 1;
                                 else if (i < 56)
                                     if (1 == bitRead(inputA[6], i - 48))
-                                        _shiftInA[i] = 1;
+                                        _sA[i] = 1;
                                     else
                                         if (1 == bitRead(inputA[7], i - 56))
-                                            _shiftInA[i] = 1;
+                                            _sA[i] = 1;
     }
 
     // Pulse to B
@@ -116,10 +116,10 @@ void _shiftIn(int dataA, int clockEnableA, int clockA, int loadA,
     {
         if (i < 8)
             if (1 == bitRead(inputB[0], i))
-                _shiftInB[i] = 1;
+                _sB[i] = 1;
             else
                 if (1 == bitRead(inputB[1], i - 8))
-                    _shiftInB[i] = 1;
+                    _sB[i] = 1;
     }
 }
 
@@ -141,6 +141,8 @@ void InputClass::init()
     pinMode(SHIFT_IN_B_CLOCK_PIN, OUTPUT);
     pinMode(SHIFT_IN_B_CLOCK_ENABLE_PIN, OUTPUT);
     pinMode(SHIFT_IN_B_LOAD_PIN, OUTPUT);
+
+
 }
 void InputClass::update()
 {
@@ -149,39 +151,40 @@ void InputClass::update()
         _shiftIn(SHIFT_IN_A_SERIAL_PIN, SHIFT_IN_A_CLOCK_ENABLE_PIN, SHIFT_IN_A_CLOCK_PIN, SHIFT_IN_A_LOAD_PIN,
             SHIFT_IN_B_SERIAL_PIN, SHIFT_IN_B_CLOCK_ENABLE_PIN, SHIFT_IN_B_CLOCK_PIN, SHIFT_IN_B_LOAD_PIN);
     }
+    // Analog updated on call (to be as fast as possible)
 }
 
 
 // Misc
 
-bool InputClass::getDebugSwitch()               { return _shiftInA[0]; }
-bool InputClass::getSoundSwitch()               { return _shiftInA[1]; }
-bool InputClass::getInputEnableButton()         { return _shiftInA[2]; }
+bool InputClass::getDebugSwitch()               { return _sA[0]; }
+bool InputClass::getSoundSwitch()               { return _sA[1]; }
+bool InputClass::getInputEnableButton()         { return _sA[2]; }
 
 // Warnings
 
-bool InputClass::getTempWarningButton()         { return _shiftInA[3]; }
-bool InputClass::getGeeWarningButton()          { return _shiftInA[4]; }
-bool InputClass::getWarpWarningButton()         { return _shiftInA[5]; }
-bool InputClass::getBrakeWarningButton()        { return _shiftInA[6]; }
-bool InputClass::getSASWarningButton()          { return _shiftInA[7]; }
-bool InputClass::getRCSWarningButton()          { return _shiftInA[8]; }
-bool InputClass::getGearWarningButton()         { return _shiftInA[9]; }
-bool InputClass::getCommsWarningButton()        { return _shiftInA[10]; }
-bool InputClass::getAltWarningButton()          { return _shiftInA[11]; }
-bool InputClass::getPitchWarningButton()        { return _shiftInA[12]; }
+bool InputClass::getTempWarningButton()         { return _sA[3]; }
+bool InputClass::getGeeWarningButton()          { return _sA[4]; }
+bool InputClass::getWarpWarningButton()         { return _sA[5]; }
+bool InputClass::getBrakeWarningButton()        { return _sA[6]; }
+bool InputClass::getSASWarningButton()          { return _sA[7]; }
+bool InputClass::getRCSWarningButton()          { return _sA[8]; }
+bool InputClass::getGearWarningButton()         { return _sA[9]; }
+bool InputClass::getCommsWarningButton()        { return _sA[10]; }
+bool InputClass::getAltWarningButton()          { return _sA[11]; }
+bool InputClass::getPitchWarningButton()        { return _sA[12]; }
 
 // Display Controls
 
-bool InputClass::getStageViewSwitch()           { return _shiftInA[13]; }
-bool InputClass::getVerticalVelocitySwitch()    { return _shiftInA[14]; }
-bool InputClass::getReferenceModeButton()       { return _shiftInA[15]; }
-bool InputClass::getRadarAltitudeSwitch()       { return _shiftInA[16]; }
+bool InputClass::getStageViewSwitch()           { return _sA[13]; }
+bool InputClass::getVerticalVelocitySwitch()    { return _sA[14]; }
+bool InputClass::getReferenceModeButton()       { return _sA[15]; }
+bool InputClass::getRadarAltitudeSwitch()       { return _sA[16]; }
 byte InputClass::getInfoMode()
 {
     for (int i = 0; i < 12; i++)
     {
-        if (_shiftInA[i + 17])
+        if (_sA[i + 17])
         {
             return i; // Return index
         }
@@ -195,7 +198,7 @@ byte InputClass::getDirectionMode()
 {
     for (int i = 0; i < 12; i++)
     {
-        if (_shiftInA[i + 29])
+        if (_sA[i + 29])
         {
             return i; // Return index
         }
@@ -208,96 +211,96 @@ byte InputClass::getDirectionMode()
 
 // Staging
 
-bool InputClass::getStageButton()               { return _shiftInA[40]; }
-bool InputClass::getStageLockSwitch()           { return _shiftInA[41]; }
+bool InputClass::getStageButton()               { return _sA[17]; }
+bool InputClass::getStageLockSwitch()           { return _sA[18]; }
 
 // Aborting
 
-bool InputClass::getAbortButton()               { return _shiftInA[42]; }
-bool InputClass::getAbortLockSwitch()           { return _shiftInA[43]; }
+bool InputClass::getAbortButton()               { return _sA[19]; }
+bool InputClass::getAbortLockSwitch()           { return _sA[20]; }
 
 // Custom Actions Groups
 
-bool InputClass::getCAG1()                      {  }
-bool InputClass::getCAG2()                      {  }
-bool InputClass::getCAG3()                      {  }
-bool InputClass::getCAG4()                      {  }
-bool InputClass::getCAG5()                      {  }
-bool InputClass::getCAG6()                      {  }
-bool InputClass::getCAG7()                      {  }
-bool InputClass::getCAG8()                      {  }
-bool InputClass::getCAG9()                      {  }
-bool InputClass::getCAG10()                     {  }
+bool InputClass::getCAG1()                      { return _sA[21]; }
+bool InputClass::getCAG2()                      { return _sA[22]; }
+bool InputClass::getCAG3()                      { return _sA[23]; }
+bool InputClass::getCAG4()                      { return _sA[24]; }
+bool InputClass::getCAG5()                      { return _sA[25]; }
+bool InputClass::getCAG6()                      { return _sA[26]; }
+bool InputClass::getCAG7()                      { return _sA[27]; }
+bool InputClass::getCAG8()                      { return _sA[28]; }
+bool InputClass::getCAG9()                      { return _sA[29]; }
+bool InputClass::getCAG10()                     { return _sA[30]; }
 
 // Other Action Groups
 
-bool InputClass::getDockingSwitch()             { return _shiftInA[44]; }
-bool InputClass::getPercisionSwitch()           { return _shiftInA[45]; }
-bool InputClass::getLightsSwitch()              { return _shiftInA[46]; }
-bool InputClass::getGearSwitch()                { return _shiftInA[47]; }
-bool InputClass::getBrakeSwitch()               { return _shiftInA[48]; }
+bool InputClass::getDockingSwitch()             { return _sA[31]; }
+bool InputClass::getPercisionSwitch()           { return _sA[32]; }
+bool InputClass::getLightsSwitch()              { return _sA[33]; }
+bool InputClass::getGearSwitch()                { return _sA[34]; }
+bool InputClass::getBrakeSwitch()               { return _sA[35]; }
 
 // View
 
-bool InputClass::getScreenshotButton()          { return _shiftInA[49]; }
-bool InputClass::getUISwitch()                  { return _shiftInA[50]; }
-bool InputClass::getNavSwitch()                 { return _shiftInA[51]; }
-bool InputClass::getViewSwitch()                { return _shiftInA[52]; }
-bool InputClass::getFocusButton()               { return _shiftInA[53]; }
-bool InputClass::getCamModeButton()             { return _shiftInA[54]; }
-bool InputClass::getCamResetButton()            { return _shiftInA[55]; }
+bool InputClass::getScreenshotButton()          { return _sA[36]; }
+bool InputClass::getUISwitch()                  { return _sA[37]; }
+bool InputClass::getNavSwitch()                 { return _sA[38]; }
+bool InputClass::getViewSwitch()                { return _sA[39]; }
+bool InputClass::getFocusButton()               { return _sA[40]; }
+bool InputClass::getCamModeButton()             { return _sA[41]; }
+bool InputClass::getCamResetButton()            { return _sA[42]; }
 bool InputClass::getEnableLookButton()          { return analogRead(TRANSLATION_BUTTON_PIN) > 50 ? false : true; }
 
 // Warping & Pause
 
-bool InputClass::getWarpLockSwitch()            { return _shiftInA[57]; }
-bool InputClass::getPhysWarpSwitch()            { return _shiftInA[58]; }
-bool InputClass::getCancelWarpButton()          { return _shiftInA[59]; }
-bool InputClass::getDecreaseWarpButton()        { return _shiftInA[60]; }
-bool InputClass::getIncreaseWarpButton()        { return _shiftInA[61]; }
-bool InputClass::getPauseButton()               { return _shiftInA[62]; }
+bool InputClass::getWarpLockSwitch()            { return _sA[43]; }
+bool InputClass::getPhysWarpSwitch()            { return _sA[44]; }
+bool InputClass::getCancelWarpButton()          { return _sA[45]; }
+bool InputClass::getDecreaseWarpButton()        { return _sA[46]; }
+bool InputClass::getIncreaseWarpButton()        { return _sA[47]; }
+bool InputClass::getPauseButton()               { return _sA[48]; }
 
 // SAS & RCS
 
-bool InputClass::getSASStabilityAssistButton()  { return _shiftInB[5]; }
-bool InputClass::getSASManeuverButton()         { return _shiftInB[6]; }
-bool InputClass::getSASProgradeButton()         { return _shiftInB[7]; }
-bool InputClass::getSASRetrogradeButton()       { return _shiftInB[8]; }
-bool InputClass::getSASNormalButton()           { return _shiftInB[9]; }
-bool InputClass::getSASAntiNormalButton()       { return _shiftInB[10]; }
-bool InputClass::getSASRadialInButton()         { return _shiftInB[11]; }
-bool InputClass::getSASRadialOutButton()        { return _shiftInB[12]; }
-bool InputClass::getSASTargetButton()           { return _shiftInB[13]; }
-bool InputClass::getSASAntiTargetButton()       { return _shiftInB[14]; }
-bool InputClass::getSASSwitch()                 { return _shiftInB[15]; }
-bool InputClass::getRCSSwitch()                 { return _shiftInB[16]; }
+bool InputClass::getSASStabilityAssistButton()  { return _sA[49]; }
+bool InputClass::getSASManeuverButton()         { return _sA[50]; }
+bool InputClass::getSASProgradeButton()         { return _sA[51]; }
+bool InputClass::getSASRetrogradeButton()       { return _sA[52]; }
+bool InputClass::getSASNormalButton()           { return _sA[53]; }
+bool InputClass::getSASAntiNormalButton()       { return _sA[54]; }
+bool InputClass::getSASRadialInButton()         { return _sA[55]; }
+bool InputClass::getSASRadialOutButton()        { return _sA[56]; }
+bool InputClass::getSASTargetButton()           { return _sA[57]; }
+bool InputClass::getSASAntiTargetButton()       { return _sA[58]; }
+bool InputClass::getSASSwitch()                 { return _sA[59]; }
+bool InputClass::getRCSSwitch()                 { return _sA[60]; }
 
 // EVA Specific Controls
 
-bool InputClass::getBoardButton()               { return _shiftInA[63]; }
-bool InputClass::getGrabButton()                { return _shiftInB[0]; }
+bool InputClass::getBoardButton()               { return _sA[61]; }
+bool InputClass::getGrabButton()                { return _sA[62]; }
 bool InputClass::getJumpButton()                { return analogRead(ROTATION_BUTTON_PIN) > 50 ? false : true; }
 
 // Throttle
 
 int  InputClass::getThrottleAxis()              { return analogRead(THROTTLE_AXIS_PIN); }
-bool InputClass::getThrottleLockSwitch()        { return _shiftInA[56]; }
+bool InputClass::getThrottleLockSwitch()        { return _sA[63]; }
 
 // Translation
 
 int  InputClass::getTranslationXAxis()          { return analogRead(TRANSLATION_X_AXIS_PIN); }
 int  InputClass::getTranslationYAxis()          { return analogRead(TRANSLATION_Y_AXIS_PIN); }
 int  InputClass::getTranslationZAxis()          { return analogRead(TRANSLATION_Z_AXIS_PIN); }
-bool InputClass::getTransHoldButton()           { return _shiftInB[1]; }
-bool InputClass::getTransResetButton()          { return _shiftInB[2]; }
+bool InputClass::getTransHoldButton()           { return _sB[0]; }
+bool InputClass::getTransResetButton()          { return _sB[1]; }
 
 // Rotation
 
 int  InputClass::getRotationXAxis()             { return analogRead(ROTATION_X_AXIS_PIN); }
 int  InputClass::getRotationYAxis()             { return analogRead(ROTATION_Y_AXIS_PIN); }
 int  InputClass::getRotationZAxis()             { return analogRead(ROTATION_Z_AXIS_PIN); }
-bool InputClass::getRotHoldButton()             { return _shiftInB[3]; }
-bool InputClass::getRotResetButton()            { return _shiftInB[4]; }
+bool InputClass::getRotHoldButton()             { return _sB[2]; }
+bool InputClass::getRotResetButton()            { return _sB[3]; }
 
 #pragma endregion
 

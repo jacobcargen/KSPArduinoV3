@@ -1,13 +1,10 @@
 /*
- Name:		Kerbal_Controller_Arduino rev2.0
+ Name:		Kerbal_Controller_Arduino rev3.0
  Created:	4/19/2023 4:14:14 PM
  Author:	Jacob Cargen
  Copyright: Jacob Cargen
 */
 
-
-#include <arduino-timer.h>
-#include "CustomSettings.h"
 #include "Output.h"
 #include "Input.h"
 #include <PayloadStructs.h>
@@ -29,16 +26,27 @@ public:
 };
 enum infoModes
 {
-
+    EMPTY = 0,
+    A = 1,
+    B = 2,
+    C = 3,
+    D = 4,
+    E = 5,
+    F = 6,
+    G = 7,
+    H = 8,
+    I = 9,
+    J = 10,
+    K = 11,
+    L = 12,
+    
 };
-// Degree character for the lcd
-const char DEGREE_CHAR_LCD = 223;
 
 #pragma region Ksp Simpit
 
 // Create insatance of Simpit
 KerbalSimpit mySimpit(Serial);
-
+// Inbound
 resourceMessage liquidFuelMsg;
 resourceMessage liquidFuelStageMsg;
 resourceMessage oxidizerMsg;
@@ -63,8 +71,8 @@ maneuverMessage maneuverMsg;
 SASInfoMessage sasInfoMsg;
 orbitInfoMessage orbitInfoMsg;
 vesselPointingMessage vesselPointingMsg;
-// Custom
-actionGroups ag;
+flightStatusMessage flightStatusMsg;
+atmoConditionsMessage atmoConditionsMsg;
 deltaVMessage deltaVMsg;
 deltaVEnvMessage deltaVEnvMsg;
 burnTimeMessage burnTimeMsg;
@@ -72,32 +80,52 @@ cagStatusMessage cagStatusMsg;
 tempLimitMessage tempLimitMsg;
 targetMessage targetMsg;
 // Custom
+actionGroups ag;
 String soi = "";
-flightStatusMessage flightStatusMsg;
-atmoConditionsMessage atmoConditionsMsg;
 
 #pragma endregion
+
+byte infoMode = EMPTY;
+
+
+/////////////////////////////////////////////////////////////////
+/////////////////////// Configing stuff /////////////////////////
+/////////////////////////////////////////////////////////////////
+
+// Degree character for the lcd
+const char DEGREE_CHAR_LCD = 223;
+
+// Warning thresholds
+
+byte COMMS_WARNING_THRESHOLD = 50; // 50%
+int LOW_ALTITUDE_WARNING_THRESHOLD = 10000; // Warning light turns solid if below this altitude in meters
+byte HIGH_GEE_WARNING_SOLID_THRESHOLD = 5; // 5G
+byte HIGH_GEE_WARNING_BLINKING_THRESHOLD = 7; // 7G
+byte HIGH_TEMP_WARNING_SOLID_THRESHOLD = 25; // 50%
+byte HIGH_TEMP_WARNING_BLINKING_THRESHOLD = 50; // 75%
+
+// Joystick configs
+
+// Multiplier for percision mode
+float PERCISION_MODIFIER = 0.5;
+// Define smoothing factor
+const float JOYSTICK_SMOOTHING_FACTOR = 0.2;  // Adjust this value for more or less smoothing (For Rot and Trans)
+
+/////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////
+
+
+const byte TEST_LED = 53;
+const byte TEST_BUTTON = 52;
 
 bool tempBeep;
 bool geeBeep;
 bool pitchBeep;
 bool altBeep;
 
-byte COMMS_WARNING_THRESHOLD = 50; // 50%
-int LOW_ALTITUDE_WARNING_THRESHOLD = 10000; // Warning light turns solid if below this altitude in meters
-byte HIGH_GEE_WARNING_SOLID_THRESHOLD = 5; // 5G
-byte HIGH_GEE_WARNING_BLINKING_THRESHOLD = 7; // 7G
-byte HIGH_TEMP_WARNING_SOLID_THRESHOLD = 50; // 50%
-byte HIGH_TEMP_WARNING_BLINKING_THRESHOLD = 75; // 75%
-
-const byte TEST_LED = 53;
-const byte TEST_BUTTON = 52;
-
-float PERCISION_MODIFIER = 0.5;
 bool translationHold = false;
 bool rotationHold = false;
-
-Timer<1> timer;
 
 int previousMillis;
 
@@ -105,31 +133,17 @@ bool isDebugMode = true;
 
 void setup()
 {
+    // Initialize Output
     Output.init();
-    Output.setPowerLED(true);
-    print("Output initialization finished.");
-
+    // Test Output
+    testOutput();
+    // Initialize Input
     //Input.init();
     //
     //
 
 
-    // Test output leds
-    bool x[144];
-    for (int i = 0; i < 144; i++)
-    {
-        x[i] = true;
-    }
-    Output.overrideSet(x);
-    Output.update();
-    delay(750);
-    for (int i = 0; i < 144; i++)
-    {
-        x[i] = false;
-    }
-    Output.overrideSet(x);
-    Output.update();
-    delay(750);
+    
 
     // SET TEST LED TO OFF
     pinMode(TEST_LED, OUTPUT);
@@ -139,9 +153,9 @@ void setup()
     Serial.begin(115200);
 
 
-    print(String(getPercent(1000, 500)));
 
 
+    ///// Initialize Simpit
     // Wait for a connection to ksp
     while (!mySimpit.init());
     // Show that the controller has connected
@@ -150,27 +164,80 @@ void setup()
     mySimpit.inboundHandler(myCallbackHandler);
     // Register the simpit channels
     registerSimpitChannels();
-    print("KSP Controller Connected");
+
+    // Additional things to do at start AFTER initialization
+
+    Output.setPowerLED(true);
+    
+    //waitForInputEnable();
+    mySimpit.update();
+
+    if (isDebugMode)
+    {
+        // Check everything one at a time
+        //testController();
+    }
+
     // Initialization complete
+    mySimpit.printToKSP("Initialization Complete!", PRINT_TO_SCREEN);
 }
 void loop() 
 {
-    // Update simpit
-    mySimpit.update();
     
-    
+    // If vessel  change, 
+    //if (vesselSwitched)
+        //waitForInputEnable();
+
+    // Update input from controller (Refresh inputs)
+    //Input.update();
 
     ////// Set things //////
     
-    setSFLEDs();
+    setCAG();
 
-    // Update output to controller
+    // Update output to controller (Refresh controller)
     Output.update();
+    
+    // Update simpit
+    mySimpit.update();
 
     if (isDebugMode)
         printHz();
 }
 
+void testOutput()
+{
+    // Test output leds
+    bool x[144];
+    for (int i = 0; i < 144; i++)
+    {
+        x[i] = true;
+    }
+    Output.overrideSet(x);
+    Output.update();
+    delay(250);
+    for (int i = 0; i < 144; i++)
+    {
+        x[i] = false;
+    }
+    Output.overrideSet(x);
+    Output.update();
+    delay(50);
+    for (int i = 0; i < 144; i++)
+    {
+        x[i] = true;
+    }
+    Output.overrideSet(x);
+    Output.update();
+    delay(250);
+    for (int i = 0; i < 144; i++)
+    {
+        x[i] = false;
+    }
+    Output.overrideSet(x);
+    Output.update();
+    delay(500);
+}
 
 void print(String x) 
 { 
@@ -194,6 +261,16 @@ void printHz()
     mySimpit.printToKSP("Loop Rate: " + String(loopRate) + " Hz", PRINT_TO_SCREEN);
     // Update the previous timestamp for the next iteration
     previousMillis = currentMillis;
+}
+
+void waitForInputEnable()
+{
+    mySimpit.printToKSP("Input deactivated!", PRINT_TO_SCREEN);
+    mySimpit.printToKSP("Please reset controller to correct state. Press the input enable button.", PRINT_TO_SCREEN);
+    // Wait for user to reset controller to default and then press Input enable button
+    while (!Input.getInputEnableButton());
+    mySimpit.printToKSP("Input activated!", PRINT_TO_SCREEN);
+    // Success!
 }
 
 #pragma region Ksp Simpit
@@ -440,17 +517,17 @@ void registerSimpitChannels()
 {
     
     // Resources
-    //mySimpit.registerChannel(LF_MESSAGE);
-    //mySimpit.registerChannel(LF_STAGE_MESSAGE);
-    //mySimpit.registerChannel(OX_MESSAGE);
-    //mySimpit.registerChannel(OX_STAGE_MESSAGE);
+    mySimpit.registerChannel(LF_MESSAGE);
+    mySimpit.registerChannel(LF_STAGE_MESSAGE);
+    mySimpit.registerChannel(OX_MESSAGE);
+    mySimpit.registerChannel(OX_STAGE_MESSAGE);
     mySimpit.registerChannel(SF_MESSAGE);
     mySimpit.registerChannel(SF_STAGE_MESSAGE);
     //mySimpit.registerChannel(XENON_GAS_MESSAGE);
     //mySimpit.registerChannel(XENON_GAS_STAGE_MESSAGE);
-    //mySimpit.registerChannel(MONO_MESSAGE);
-    //mySimpit.registerChannel(EVA_MESSAGE);
-    //mySimpit.registerChannel(ELECTRIC_MESSAGE);
+    mySimpit.registerChannel(MONO_MESSAGE);
+    mySimpit.registerChannel(EVA_MESSAGE);
+    mySimpit.registerChannel(ELECTRIC_MESSAGE);
     //mySimpit.registerChannel(ORE_MESSAGE);
     //mySimpit.registerChannel(AB_MESSAGE);
     //mySimpit.registerChannel(AB_STAGE_MESSAGE);
@@ -469,12 +546,12 @@ void registerSimpitChannels()
     //mySimpit.registerChannel(DELTAV_MESSAGE);
     //mySimpit.registerChannel(DELTAVENV_MESSAGE);
     //mySimpit.registerChannel(BURNTIME_MESSAGE);
-    //mySimpit.registerChannel(CAGSTATUS_MESSAGE);
+    mySimpit.registerChannel(CAGSTATUS_MESSAGE);
     //mySimpit.registerChannel(TEMP_LIMIT_MESSAGE);
     //mySimpit.registerChannel(TARGETINFO_MESSAGE);
     //mySimpit.registerChannel(SOI_MESSAGE);
     //mySimpit.registerChannel(SCENE_CHANGE_MESSAGE);
-    //mySimpit.registerChannel(FLIGHT_STATUS_MESSAGE);
+    mySimpit.registerChannel(FLIGHT_STATUS_MESSAGE);
     //mySimpit.registerChannel(ATMO_CONDITIONS_MESSAGE);
     //mySimpit.registerChannel(VESSEL_NAME_MESSAGE);
     
@@ -488,37 +565,39 @@ void updateAllChecks()
     // Misc
     if (Input.getDebugSwitch())
     {
+
     }
     if (Input.getSoundSwitch())
     {
+        // WIP
     }
     if (Input.getInputEnableButton())
     {
 
     }
     // Warnings
-    setTempWarningCancel();
-    setGeeWarningCancel();
-    setWarpWarningCancel();
-    setBrakeWarningCancel();
-    setSASWarningCancel();
-    setRCSWarningCancel();
-    setGearWarningCancel();
-    setCommsWarningCancel();
-    setAltWarningCancel();
-    setPitchWarningCancel();
-    // Display
+    setTempWarningCancel();       // WIP
+    setGeeWarningCancel();        // WIP
+    setWarpWarningCancel();       // WIP
+    setBrakeWarningCancel();      // WIP
+    setSASWarningCancel();        // WIP
+    setRCSWarningCancel();        // WIP
+    setGearWarningCancel();       // WIP
+    setCommsWarningCancel();      // WIP
+    setAltWarningCancel();        // WIP
+    setPitchWarningCancel();      // WIP
+    // Display Controls
     setInfoMode();
     setDirectionMode();
     setVerticalVelocity();
     setReferenceMode();
     setRadarAlt();
     // Resources
-    setLFLEDs();
-    setSFLEDs();
-    setOXLEDs();
-    setMPLEDs();
-    setECLEDs();
+    setLFLEDs(); // working
+    setSFLEDs(); // working
+    setOXLEDs(); // working
+    setMPLEDs(); // working
+    setECLEDs(); // working
     // Display
     setSpeedLCD();
     setAltitufeLCD();
@@ -569,7 +648,7 @@ void setDirectionMode()
 }
 void setInfoMode()
 {
-    switch (Input.getInfoMode()) {}
+    infoMode = Input.getInfoMode();
 }
 void setReferenceMode()
 {
@@ -582,6 +661,44 @@ void setRadarAlt()
     {
 
     }
+}
+void setVerticalVelocity()
+{
+    /*
+    if (Input.getVerticalVelocitySwitch())
+    {
+        if (!Input.getVerticalVelocitySwitch())
+        {
+            if (currentSpeedMode + 1 == SPEED_VERTICAL_MODE)
+            {
+                if (currentSpeedMode + 1 >= sizeof(SpeedModes))
+                {
+                    currentSpeedMode = 0;
+                }
+                else
+                {
+                    currentSpeedMode += 2;
+                }
+            }
+            else
+            {
+                // Next speed mode
+                if (currentSpeedMode == sizeof(SpeedModes) - 1)
+                {
+                    currentSpeedMode = 0;
+                }
+                else
+                {
+                    currentSpeedMode++;
+                }
+            }
+        }
+        else // Vertical Velocity
+        {
+            currentSpeedMode = SPEED_VERTICAL_MODE;
+        }
+    }
+    */
 }
 
 // Warning Cancel
@@ -694,7 +811,7 @@ void setCommsWarning()
 }
 void setAltWarning()
 {
-    if (altitudeMsg.surface < LOW_ALTITUDE_WARNING_THRESHOLD)
+    if (altitudeMsg.surface < LOW_ALTITUDE_WARNING_THRESHOLD && true/*if speed is more than thres && other conditions*/)
     {
         Output.setAltWarningLED(true);
     }
@@ -902,102 +1019,61 @@ void setDirectionLCD()
 // Resouces
 void setSFLEDs()
 {
-    double percentFull = 0.0;
-    double amt = 0.0;
-    // Normal
-    if (!Input.getStageViewSwitch())
-        percentFull = getPercent(solidFuelMsg.total, solidFuelMsg.available);
-    else
-        percentFull = getPercent(solidFuelStageMsg.total, solidFuelStageMsg.available);
-    amt = 20 - PercentageToValue(20, percentFull);
-
     bool newLEDs[20];
-    for (int i = 20; i > 0; i--)
-    {
-        if (i >= amt)
-            newLEDs[i] = true;
-        else
-            newLEDs[i] = false;
-    }
-
+    if (!Input.getStageViewSwitch())
+        calcResource(solidFuelMsg.total, solidFuelMsg.available, newLEDs);
+    else
+        calcResource(solidFuelStageMsg.total, solidFuelStageMsg.available, newLEDs);
     Output.setSolidFuelLEDs(newLEDs);
 }
 void setLFLEDs()
 {
-    byte percentFull;
-    // Normal
+    bool newLEDs[20]; 
     if (!Input.getStageViewSwitch())
-    {
-        percentFull = getPercent(liquidFuelMsg.total, liquidFuelMsg.available);
-    }
-    // Stage View
+        calcResource(liquidFuelMsg.total, liquidFuelMsg.available, newLEDs);
     else
-    {
-        percentFull = getPercent(liquidFuelStageMsg.total, liquidFuelStageMsg.available);
-    }
-    bool newLEDs[20];
-    byte amt = (byte)PercentageToValue(20, percentFull);
-    for (int i = amt; i >= 0; i--)
-    {
-        newLEDs[i] = true;
-    }
+        calcResource(liquidFuelStageMsg.total, liquidFuelStageMsg.available, newLEDs);
     Output.setLiquidFuelLEDs(newLEDs);
 }
 void setOXLEDs()
 {
-    byte percentFull;
-    // Normal
-    if (!Input.getStageViewSwitch())
-    {
-        percentFull = getPercent(oxidizerMsg.total, oxidizerMsg.available);
-    }
-    // Stage View
-    else
-    {
-        percentFull = getPercent(oxidizerStageMsg.total, oxidizerStageMsg.available);
-    }
     bool newLEDs[20];
-    byte amt = (byte)PercentageToValue(20, percentFull);
-    for (int i = amt; i >= 0; i--)
-    {
-        newLEDs[i] = true;
-    }
+    if (!Input.getStageViewSwitch())
+        calcResource(oxidizerMsg.total, oxidizerMsg.available, newLEDs);
+    else
+        calcResource(oxidizerStageMsg.total, oxidizerStageMsg.available, newLEDs);
     Output.setOxidizerLEDs(newLEDs);
 }
 void setMPLEDs()
 {
-    byte percentFull;
-    // EVA mp
-    if (flightStatusMsg.isInEVA())
-    {
-        percentFull = getPercent(evaMonopropellantMsg.total, evaMonopropellantMsg.available);
-    }
-    // Stage View
-    else
-    {
-        // Always shows all monopropellant available
-        percentFull = getPercent(monopropellantMsg.total, monopropellantMsg.available);
-    }
     bool newLEDs[20];
-    byte amt = (byte)PercentageToValue(20, percentFull);
-    for (int i = amt; i >= 0; i--)
-    {
-        newLEDs[i] = true;
-    }
+    if (flightStatusMsg.isInEVA())
+        calcResource(evaMonopropellantMsg.total, evaMonopropellantMsg.available, newLEDs);
+    else
+        calcResource(monopropellantMsg.total, monopropellantMsg.available, newLEDs);
     Output.setMonopropellantLEDs(newLEDs);
 }
 void setECLEDs()
 {
-    byte percentFull;
-    // Always shows all electricity available
-    percentFull = getPercent(electricityMsg.total, electricityMsg.available);
     bool newLEDs[20];
-    byte amt = (byte)PercentageToValue(20, percentFull);
-    for (int i = amt; i >= 0; i--)
-    {
-        newLEDs[i] = true;
-    }
+    calcResource(electricityMsg.total, electricityMsg.available, newLEDs);
     Output.setElectricityLEDs(newLEDs);
+}
+void calcResource(float total, float avail, bool * newLEDs)
+{
+    double percentFull = 0.0;
+    double amt = 0.0;
+
+    percentFull = getPercent(total, avail);
+    amt = 20 - PercentageToValue(20, percentFull);
+
+    for (int i = 20; i > 0; i--)
+    {
+        if (i > amt)
+            newLEDs[i] = true;
+        else
+            newLEDs[i] = false;
+    }
 }
 // Other action groups
 void setStage()
@@ -1054,6 +1130,7 @@ void setDocking()
 {
     if (Input.getDockingSwitch())
     {
+        // NOT IMPLEMENTED
     }
     else
     {
@@ -1149,7 +1226,6 @@ void setView()
     if (Input.getViewSwitch())
     {
         // External
-
     }
     else
     {
@@ -1170,44 +1246,6 @@ void setUI()
 void setScreenshot()
 {
     if (Input.getScreenshotButton()) {}
-}
-void setVerticalVelocity()
-{
-    /*
-    if (Input.getVerticalVelocitySwitch())
-    {
-        if (!Input.getVerticalVelocitySwitch())
-        {
-            if (currentSpeedMode + 1 == SPEED_VERTICAL_MODE)
-            {
-                if (currentSpeedMode + 1 >= sizeof(SpeedModes))
-                {
-                    currentSpeedMode = 0;
-                }
-                else
-                {
-                    currentSpeedMode += 2;
-                }
-            }
-            else
-            {
-                // Next speed mode
-                if (currentSpeedMode == sizeof(SpeedModes) - 1)
-                {
-                    currentSpeedMode = 0;
-                }
-                else
-                {
-                    currentSpeedMode++;
-                }
-            }
-        }
-        else // Vertical Velocity
-        {
-            currentSpeedMode = SPEED_VERTICAL_MODE;
-        }
-    }
-    */
 }
 // Warping & Pause
 void setWarp()
@@ -1253,6 +1291,7 @@ void setSAS()
         mySimpit.activateAction(SAS_ACTION);
     else
         mySimpit.deactivateAction(SAS_ACTION);
+
     if (ag.isSAS)
         Output.setSASWarningLED(true);
     else
@@ -1264,6 +1303,7 @@ void setRCS()
         mySimpit.activateAction(RCS_ACTION);
     else
         mySimpit.deactivateAction(RCS_ACTION);
+
     if (ag.isRCS)
         Output.setRCSWarningLED(true);
     else
@@ -1469,12 +1509,13 @@ void setRotationHold()
 
 /// <summary>Give the raw analog some smoothing.</summary>
 /// <returns>Returns a smoothed and mapped value.</returns>
-int16_t smoothAndMapAxis(int raw)
+int16_t smoothAndMapAxis(int raw, bool isSmooth = true)
 {
-    // Smooth the raw input (NO SMOOTHING YET)
-    int smooth = raw;
+    // Smooth the raw input using exponential moving average (EMA)
+    int smoothed = (int)(JOYSTICK_SMOOTHING_FACTOR * raw + (1.0 - JOYSTICK_SMOOTHING_FACTOR) * raw);
+
     // Map the smoothed data for simpit
-    int16_t mappedAndSmoothed = map(smooth, 0, 1023, INT16_MIN, INT16_MAX);
+    int16_t mappedAndSmoothed = map(smoothed, 0, 1023, INT16_MIN, INT16_MAX);
     // Return the smoothed mapped data
     return mappedAndSmoothed;
 }

@@ -72,9 +72,6 @@
     <ClCompile Include="Output.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="CustomSettings.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\..\AppData\Local\arduino15\packages\arduino\hardware\sam\1.6.12\cores\arduino\abi.cpp">
       <Filter>src\_micro-api-readonly\core</Filter>
     </ClCompile>
@@ -183,9 +180,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Output.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="CustomSettings.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\AppData\Local\arduino15\packages\arduino\hardware\sam\1.6.12\cores\arduino\Arduino.h">

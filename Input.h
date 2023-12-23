@@ -1,5 +1,5 @@
 /*
- Name:		Kerbal_Controller_Arduino rev2.0
+ Name:		Kerbal_Controller_Arduino rev3.0
  Created:	4/19/2023 4:14:14 PM
  Author:	Jacob Cargen
  Copyright: Jacob Cargen
