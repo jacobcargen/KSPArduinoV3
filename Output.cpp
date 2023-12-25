@@ -23,6 +23,10 @@ int const _SHIFT_OUT_C_DATA_PIN = 8;
 int const _SHIFT_OUT_C_LATCH_PIN = 9;
 int const _SHIFT_OUT_C_CLOCK_PIN = 10;
 
+const byte TEST_LED = 53;
+
+bool testLEDState = false;
+
 // Shift out pins
 bool _sA[64] = { 0 };
 bool _sB[64] = { 0 };
@@ -186,8 +190,12 @@ void OutputClass::init()
     pinMode(_SHIFT_OUT_C_LATCH_PIN, OUTPUT);
     pinMode(_SHIFT_OUT_C_CLOCK_PIN, OUTPUT);
 
+    
+    pinMode(TEST_LED, OUTPUT);
+
     _sendShiftOut(_sA, 64, _SHIFT_OUT_A_DATA_PIN, _SHIFT_OUT_A_LATCH_PIN, _SHIFT_OUT_A_CLOCK_PIN);
     _sendShiftOut(_sB, 64, _SHIFT_OUT_B_DATA_PIN, _SHIFT_OUT_B_LATCH_PIN, _SHIFT_OUT_B_CLOCK_PIN);
+    _sendShiftOut(_sC, 64, _SHIFT_OUT_C_DATA_PIN, _SHIFT_OUT_C_LATCH_PIN, _SHIFT_OUT_C_CLOCK_PIN);
     
 }
 /// <summary>Update the controller outputs.</summary>
@@ -203,16 +211,21 @@ void OutputClass::update()
 
     _sendShiftOut(_sA, 64, _SHIFT_OUT_A_DATA_PIN, _SHIFT_OUT_A_LATCH_PIN, _SHIFT_OUT_A_CLOCK_PIN);
     _sendShiftOut(_sB, 64, _SHIFT_OUT_B_DATA_PIN, _SHIFT_OUT_B_LATCH_PIN, _SHIFT_OUT_B_CLOCK_PIN);
-    //_sendShiftOut(_shiftOutC, 64, _SHIFT_OUT_C_DATA_PIN, _SHIFT_OUT_C_LATCH_PIN, _SHIFT_OUT_C_CLOCK_PIN);
+    _sendShiftOut(_sC, 64, _SHIFT_OUT_C_DATA_PIN, _SHIFT_OUT_C_LATCH_PIN, _SHIFT_OUT_C_CLOCK_PIN);
+    
+    if (testLEDState)
+        digitalWrite(TEST_LED, HIGH);
+    else
+        digitalWrite(TEST_LED, LOW);
 }
 
+void OutputClass::setTestLED(bool state)
+{
+    testLEDState = state;
+}
 
 // Misc
 
-void OutputClass::setSpeaker(bool state)
-{
-
-}
 
 void OutputClass::setPowerLED(bool state)
 {

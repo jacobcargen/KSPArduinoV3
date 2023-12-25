@@ -10,6 +10,13 @@
 #ifndef _INPUT_h
 #define _INPUT_h
 
+enum ButtonState
+{
+    OFF = 0,
+    ON = 1,
+    NOT_READY = 255,
+};
+
 #if defined(ARDUINO) && ARDUINO >= 100
 	#include "arduino.h"
 #else
@@ -27,127 +34,119 @@ class InputClass
 
 	 void update();
 
-	 // Misc
+     // Test Buttons
+     byte getTestButton();
+     byte getTestSwitch();
 
-	 bool getDebugSwitch();
-	 bool getSoundSwitch();
-	 bool getInputEnableButton();
+     // Miscellaneous
+     byte getDebugSwitch();
+     byte getSoundSwitch();
+     byte getInputEnableButton();
 
-	 // Warnings
+     // Warnings
+     byte getTempWarningButton();
+     byte getGeeWarningButton();
+     byte getWarpWarningButton();
+     byte getBrakeWarningButton();
+     byte getSASWarningButton();
+     byte getRCSWarningButton();
+     byte getGearWarningButton();
+     byte getCommsWarningButton();
+     byte getAltWarningButton();
+     byte getPitchWarningButton();
 
-	 bool getTempWarningButton(); 
-	 bool getGeeWarningButton();
-	 bool getWarpWarningButton();
-	 bool getBrakeWarningButton();
-	 bool getSASWarningButton();
-	 bool getRCSWarningButton();
-	 bool getGearWarningButton();
-	 bool getCommsWarningButton();
-	 bool getAltWarningButton();
-	 bool getPitchWarningButton();
+     // Display Controls
+     byte getInfoMode();
+     byte getDirectionMode();
+     byte getStageViewSwitch();
+     byte getVerticalVelocitySwitch();
+     byte getReferenceModeButton(); // WIP
+     byte getRadarAltitudeSwitch();
 
-	 // Display Controls
+     // Staging
+     byte getStageButton(); // done
+     byte getStageLockSwitch(); // done
 
-	 byte getInfoMode();
-	 byte getDirectionMode();
-	 bool getStageViewSwitch();
-	 bool getVerticalVelocitySwitch();
-	 bool getReferenceModeButton(); // WIP
-	 bool getRadarAltitudeSwitch();
+     // Aborting
+     byte getAbortButton(); // done
+     byte getAbortLockSwitch(); // done
 
-	 // Staging
+     // Custom Action Groups
+     byte getCAG1(); // done
+     byte getCAG2(); // done
+     byte getCAG3(); // done
+     byte getCAG4(); // done
+     byte getCAG5(); // done
+     byte getCAG6(); // done
+     byte getCAG7(); // done
+     byte getCAG8(); // done
+     byte getCAG9(); // done
+     byte getCAG10(); // done
 
-	 bool getStageButton(); // done
-	 bool getStageLockSwitch(); // done
+     // Other Action Groups
+     byte getDockingSwitch(); // WIP
+     byte getPercisionSwitch(); // done
+     byte getLightsSwitch(); // done
+     byte getGearSwitch(); // done
+     byte getBrakeSwitch(); // done
 
-	 // Aborting
+     // View
+     byte getScreenshotButton();
+     byte getUISwitch();
+     byte getNavSwitch();
+     byte getViewSwitch();
+     byte getFocusButton();
+     byte getCamModeButton();
+     byte getCamResetButton();
+     byte getEnableLookButton(); // WIP
 
-	 bool getAbortButton(); // done
-	 bool getAbortLockSwitch(); // done
+     // Warping & Pause
+     byte getWarpLockSwitch();
+     byte getPhysWarpSwitch();
+     byte getCancelWarpButton();
+     byte getDecreaseWarpButton();
+     byte getIncreaseWarpButton();
+     byte getPauseButton();
 
-	 // Custom Action Groups
+     // SAS & RCS
+     byte getSASStabilityAssistButton(); // done
+     byte getSASManeuverButton();         // done
+     byte getSASProgradeButton();         // done
+     byte getSASRetrogradeButton();       // done
+     byte getSASNormalButton();           // done
+     byte getSASAntiNormalButton();       // done
+     byte getSASRadialInButton();         // done
+     byte getSASRadialOutButton();        // done
+     byte getSASTargetButton();           // done
+     byte getSASAntiTargetButton();       // done
+     byte getSASSwitch();                 // done
+     byte getRCSSwitch();                 // done
 
-	 bool getCAG1(); // done
-	 bool getCAG2(); // done
-	 bool getCAG3(); // done
-	 bool getCAG4(); // done
-	 bool getCAG5(); // done
-	 bool getCAG6(); // done
-	 bool getCAG7(); // done
-	 bool getCAG8(); // done
-	 bool getCAG9(); // done
-	 bool getCAG10(); // done
+     // EVA Specific Controls
+     byte getBoardButton();
+     byte getGrabButton();
+     byte getJumpButton();
 
-	 // Other Action Groups
+     // Throttle
+     int getThrottleAxis(); // done
+     byte getThrottleLockSwitch(); // done
 
-	 bool getDockingSwitch(); // WIP
-	 bool getPercisionSwitch(); // done
-	 bool getLightsSwitch(); // done
-	 bool getGearSwitch(); // done
-	 bool getBrakeSwitch(); //done
+     // Translation
+     int getTranslationXAxis(); // done
+     int getTranslationYAxis(); // done
+     int getTranslationZAxis(); // done
+     byte getTransHoldButton(); // WIP
+     byte getTransResetButton(); // WIP
 
-	 // View
+     // Rotation
+     int getRotationXAxis(); // done
+     int getRotationYAxis(); // done
+     int getRotationZAxis(); // done
+     byte getRotHoldButton(); // WIP
+     byte getRotResetButton(); // WIP
 
-	 bool getScreenshotButton();
-	 bool getUISwitch();
-	 bool getNavSwitch();
-	 bool getViewSwitch();
-	 bool getFocusButton();
-	 bool getCamModeButton();
-	 bool getCamResetButton();
-	 bool getEnableLookButton();
 
-	 // Warping & Pause
-
-	 bool getWarpLockSwitch();
-	 bool getPhysWarpSwitch();
-	 bool getCancelWarpButton();
-	 bool getDecreaseWarpButton();
-	 bool getIncreaseWarpButton();
-	 bool getPauseButton();
-
-	 // SAS & RCS
-
-	 bool getSASStabilityAssistButton(); // done
-	 bool getSASManeuverButton();		 // done
-	 bool getSASProgradeButton();		 // done
-	 bool getSASRetrogradeButton();		 // done
-	 bool getSASNormalButton();			 // done
-	 bool getSASAntiNormalButton();		 // done
-	 bool getSASRadialInButton();		 // done
-	 bool getSASRadialOutButton();		 // done
-	 bool getSASTargetButton();			 // done
-	 bool getSASAntiTargetButton();		 // done
-	 bool getSASSwitch(); // done
-	 bool getRCSSwitch(); // done
-
-	 // EVA Specific Controls
-
-	 bool getBoardButton();
-	 bool getGrabButton();
-	 bool getJumpButton();
-
-	 // Throttle
-
-	 int  getThrottleAxis(); // done
-	 bool getThrottleLockSwitch(); // done
-
-	 // Translation
-
-	 int  getTranslationXAxis(); // done
-	 int  getTranslationYAxis(); // done
-	 int  getTranslationZAxis(); // done
-	 bool getTransHoldButton(); // WIP
-	 bool getTransResetButton(); // WIP
-
-	 // Rotation
-
-	 int  getRotationXAxis(); // done
-	 int  getRotationYAxis(); // done
-	 int  getRotationZAxis(); // done
-	 bool getRotHoldButton(); // WIP
-	 bool getRotResetButton(); // WIP
-
+	 ~InputClass();  // Destructor declaration
 };
 
 extern InputClass Input;

@@ -26,11 +26,12 @@ public:
 	void init();
 	void update();
 
+	void setTestLED(bool state);
+
 	void overrideSet(bool x[144]);
 	// Misc
 
 	void setPowerLED(bool state);
-	void setSpeaker(bool state);
 
 	// Warnings
 

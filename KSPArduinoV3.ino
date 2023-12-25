@@ -116,9 +116,6 @@ const float JOYSTICK_SMOOTHING_FACTOR = 0.2;  // Adjust this value for more or l
 /////////////////////////////////////////////////////////////////
 
 
-const byte TEST_LED = 53;
-const byte TEST_BUTTON = 52;
-
 bool tempBeep;
 bool geeBeep;
 bool pitchBeep;
@@ -135,19 +132,18 @@ void setup()
 {
     // Initialize Output
     Output.init();
+    // Initialize Input
+    Input.init();
+    
     // Test Output
     testOutput();
-    // Initialize Input
-    //Input.init();
+    // Test Input
     //
-    //
+
+
 
 
     
-
-    // SET TEST LED TO OFF
-    pinMode(TEST_LED, OUTPUT);
-    //pinMode(TEST_BUTTON, INPUT_PULLUP);
 
     // Open up the serial port
     Serial.begin(115200);
@@ -180,6 +176,25 @@ void setup()
 
     // Initialization complete
     mySimpit.printToKSP("Initialization Complete!", PRINT_TO_SCREEN);
+
+
+
+
+    // INPUT READ EXAMPLE
+    byte state = Input.getAbortButton();
+    // Return if not ready to read
+    if (state == NOT_READY)
+        return;
+    // If ON
+    if (state == ON)
+    {
+
+    }
+    // If OFF
+    else if (state == OFF)
+    {
+
+    }
 }
 void loop() 
 {
@@ -189,7 +204,7 @@ void loop()
         //waitForInputEnable();
 
     // Update input from controller (Refresh inputs)
-    //Input.update();
+    Input.update();
 
     ////// Set things //////
     
@@ -200,6 +215,20 @@ void loop()
     
     // Update simpit
     mySimpit.update();
+
+    byte testSwitchState = Input.getTestSwitch();
+    mySimpit.printToKSP("Test Switch State: " + String(testSwitchState), PRINT_TO_SCREEN);
+
+    if (testSwitchState != NOT_READY)
+    {
+        mySimpit.printToKSP("Setting LED: " + String(testSwitchState), PRINT_TO_SCREEN);
+
+        // Debug statement
+        Serial.println();
+
+        // Take actions based on the state
+        Output.setTestLED(testSwitchState == ON);
+    }
 
     if (isDebugMode)
         printHz();
@@ -1509,7 +1538,7 @@ void setRotationHold()
 
 /// <summary>Give the raw analog some smoothing.</summary>
 /// <returns>Returns a smoothed and mapped value.</returns>
-int16_t smoothAndMapAxis(int raw, bool isSmooth = true)
+int16_t smoothAndMapAxis(int raw)//, bool isSmooth = true)
 {
     // Smooth the raw input using exponential moving average (EMA)
     int smoothed = (int)(JOYSTICK_SMOOTHING_FACTOR * raw + (1.0 - JOYSTICK_SMOOTHING_FACTOR) * raw);
