@@ -36,7 +36,7 @@ class InputClass
 
      // Test Buttons
      byte getTestButton();
-     byte getTestSwitch();
+     byte getTestSwitch(byte state);
 
      // Miscellaneous
      byte getDebugSwitch();

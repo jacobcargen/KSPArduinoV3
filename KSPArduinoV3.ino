@@ -148,15 +148,15 @@ void setup()
     // Open up the serial port
     Serial.begin(115200);
 
-
-
-
     ///// Initialize Simpit
     // Wait for a connection to ksp
-    while (!mySimpit.init());
+    while (!mySimpit.init())
+    {
+        preKSPConnectionLoop();
+    }
     // Show that the controller has connected
     mySimpit.printToKSP("KSP Controller Connected!", PRINT_TO_SCREEN);
-    // Register a method for receiving simpit messages from ksp
+    // Register a method for receiving simpit message from ksp
     mySimpit.inboundHandler(myCallbackHandler);
     // Register the simpit channels
     registerSimpitChannels();
@@ -168,11 +168,6 @@ void setup()
     //waitForInputEnable();
     mySimpit.update();
 
-    if (isDebugMode)
-    {
-        // Check everything one at a time
-        //testController();
-    }
 
     // Initialization complete
     mySimpit.printToKSP("Initialization Complete!", PRINT_TO_SCREEN);
@@ -196,6 +191,27 @@ void setup()
 
     }
 }
+void preKSPConnectionLoop()
+{
+    delay(200);
+    Input.update();
+    Output.update();
+
+    String line1, line2, line3, line4;
+
+    print(line1);
+
+    line2 = "True state: " + String(Input.getTestSwitch(0)); // 1, 0
+    print(line2);
+
+    line3 = "State: " + String(Input.getTestSwitch(1)); // 1, 0
+    print(line3);
+    //                                                             ON, OFF, NOT READY
+    line4 = "Virtual State: " + String(Input.getTestSwitch(2)); // 1,  0,   255
+    print(line4);
+
+
+}
 void loop() 
 {
     
@@ -216,19 +232,6 @@ void loop()
     // Update simpit
     mySimpit.update();
 
-    byte testSwitchState = Input.getTestSwitch();
-    mySimpit.printToKSP("Test Switch State: " + String(testSwitchState), PRINT_TO_SCREEN);
-
-    if (testSwitchState != NOT_READY)
-    {
-        mySimpit.printToKSP("Setting LED: " + String(testSwitchState), PRINT_TO_SCREEN);
-
-        // Debug statement
-        Serial.println();
-
-        // Take actions based on the state
-        Output.setTestLED(testSwitchState == ON);
-    }
 
     if (isDebugMode)
         printHz();

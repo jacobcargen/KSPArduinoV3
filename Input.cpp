@@ -74,7 +74,7 @@ int numPins;
 
 
 
-void AddInput(bool& referenceToBoolVal, int virtualPin)
+void AddInput(bool * referenceToBoolVal, int virtualPin)
 {
     InputPin* newPins = new InputPin[numPins + 1];
 
@@ -85,7 +85,7 @@ void AddInput(bool& referenceToBoolVal, int virtualPin)
     }
 
     // Add the new input
-    newPins[numPins].value = &referenceToBoolVal;
+    newPins[numPins].value = referenceToBoolVal;
     newPins[numPins].lastState = *newPins[numPins].value;
     newPins[numPins].lastDebounceTime = 0;
     newPins[numPins].debounceDelay = 50; // You can adjust the debounce delay if needed
@@ -99,19 +99,25 @@ void AddInput(bool& referenceToBoolVal, int virtualPin)
 
 ButtonState getVirtualPinState(int virtualPin)
 {
+    // Check for this pins from all possible
     for (int i = 0; i < numPins; i++)
     {
+        // If found
         if (i == virtualPin)
         {
+            // Local val storing current button state
             bool inputReading = *pins[i].value;
-
+            // IF current != last     AND     current time - debounce time > debounce delay              
             if (inputReading != pins[i].lastState && millis() - pins[i].lastDebounceTime > pins[i].debounceDelay)
             {
+                // Set last to current
                 pins[i].lastState = inputReading;
+                // Set last debounce time to current time
                 pins[i].lastDebounceTime = millis();
+                // Return the new state
                 return pins[i].lastState ? ON : OFF;
             }
-
+            // Same as last state
             return NOT_READY;
         }
     }
@@ -122,21 +128,21 @@ ButtonState getVirtualPinState(int virtualPin)
 
 void initVirtualPins()
 {
-    for (int i = 0; i < 82; i++)
+    for (int i = 0; i < numPins; i++)
     {
         if (i < 64)
-            AddInput(_sIA[i], i);
+            AddInput(&_sIA[i], i);
         else if (i < 80)
-            AddInput(_sIB[i - 64], i);
+            AddInput(&_sIB[i - 64], i);
         else
         {
-            AddInput(testButton, 80);
-            AddInput(testSwitch, 81);
-            break;
+            AddInput(&testButton, 80);
+            AddInput(&testSwitch, 81);
+
+
+            i = numPins;
         }
     }
-
-
 }
 
 /// <summary>Gets shift register inputs.(MSBFIRST)</summary>
@@ -254,7 +260,6 @@ void InputClass::update()
 
     testButton = digitalRead(TEST_BUTTON);
     testSwitch = digitalRead(TEST_SWITCH);
-    Output.setPowerLED(pins[81].value);
     
 
 
@@ -277,7 +282,22 @@ void InputClass::update()
 // Testing
 
 byte InputClass::getTestButton()                 { return getVirtualPinState(80); }
-byte InputClass::getTestSwitch()                 { return getVirtualPinState(81); }
+byte InputClass::getTestSwitch(byte state) 
+{ 
+    switch (state)
+    {
+    case 0:
+        return digitalRead(TEST_SWITCH) ? 1:0;
+        break;
+    case 1:
+        return testSwitch ? 1:0;
+        break;
+    case 2:
+        byte val = pins[81].value ? 1 : 0;
+        return val;//getVirtualPinState(81);
+        break;
+    }
+}
 
 // Miscellaneous
 
@@ -411,22 +431,22 @@ byte InputClass::getJumpButton()                 { return analogRead(ROTATION_BU
 
 // Throttle
 
-int  InputClass::getThrottleAxis()                      { return analogRead(THROTTLE_AXIS_PIN); }
+int  InputClass::getThrottleAxis()               { return analogRead(THROTTLE_AXIS_PIN); }
 byte InputClass::getThrottleLockSwitch()         { return getVirtualPinState(63); }
 
 // Translation
 
-int  InputClass::getTranslationXAxis()                  { return analogRead(TRANSLATION_X_AXIS_PIN); }
-int  InputClass::getTranslationYAxis()                  { return analogRead(TRANSLATION_Y_AXIS_PIN); }
-int  InputClass::getTranslationZAxis()                  { return analogRead(TRANSLATION_Z_AXIS_PIN); }
+int  InputClass::getTranslationXAxis()           { return analogRead(TRANSLATION_X_AXIS_PIN); }
+int  InputClass::getTranslationYAxis()           { return analogRead(TRANSLATION_Y_AXIS_PIN); }
+int  InputClass::getTranslationZAxis()           { return analogRead(TRANSLATION_Z_AXIS_PIN); }
 byte InputClass::getTransHoldButton()            { return getVirtualPinState(64); }
 byte InputClass::getTransResetButton()           { return getVirtualPinState(65); }
 
 // Rotation
 
-int  InputClass::getRotationXAxis()                     { return analogRead(ROTATION_X_AXIS_PIN); }
-int  InputClass::getRotationYAxis()                     { return analogRead(ROTATION_Y_AXIS_PIN); }
-int  InputClass::getRotationZAxis()                     { return analogRead(ROTATION_Z_AXIS_PIN); }
+int  InputClass::getRotationXAxis()              { return analogRead(ROTATION_X_AXIS_PIN); }
+int  InputClass::getRotationYAxis()              { return analogRead(ROTATION_Y_AXIS_PIN); }
+int  InputClass::getRotationZAxis()              { return analogRead(ROTATION_Z_AXIS_PIN); }
 byte InputClass::getRotHoldButton()              { return getVirtualPinState(66); }
 byte InputClass::getRotResetButton()             { return getVirtualPinState(67); }
 
