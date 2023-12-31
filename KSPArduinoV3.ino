@@ -5,6 +5,7 @@
  Copyright: Jacob Cargen
 */
 
+#include "Print.h"
 #include "Output.h"
 #include "Input.h"
 #include <PayloadStructs.h>
@@ -23,6 +24,10 @@ public:
     bool isLights;
     bool isGear;
     bool isBrake;
+};
+struct inputStates
+{
+
 };
 enum infoModes
 {
@@ -115,51 +120,26 @@ const float JOYSTICK_SMOOTHING_FACTOR = 0.2;  // Adjust this value for more or l
 /////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////
 
-
-bool tempBeep;
-bool geeBeep;
-bool pitchBeep;
-bool altBeep;
-
 bool translationHold = false;
 bool rotationHold = false;
 
+// For hz
 int previousMillis;
 
 bool isDebugMode = true;
 
 void setup()
 {
-    // Initialize Output
-    Output.init();
-    // Initialize Input
-    Input.init();
-    
-    // Test Output
-    testOutput();
-    // Test Input
-    //
-
-
-
-
-    
-
     // Open up the serial port
     Serial.begin(115200);
 
+    initIO();
+
+    //while (true)
+        //preKSPConnectionLoop();
+
     ///// Initialize Simpit
-    // Wait for a connection to ksp
-    while (!mySimpit.init())
-    {
-        preKSPConnectionLoop();
-    }
-    // Show that the controller has connected
-    mySimpit.printToKSP("KSP Controller Connected!", PRINT_TO_SCREEN);
-    // Register a method for receiving simpit message from ksp
-    mySimpit.inboundHandler(myCallbackHandler);
-    // Register the simpit channels
-    registerSimpitChannels();
+    initSimpit();
 
     // Additional things to do at start AFTER initialization
 
@@ -175,42 +155,29 @@ void setup()
 
 
 
-    // INPUT READ EXAMPLE
-    byte state = Input.getAbortButton();
-    // Return if not ready to read
-    if (state == NOT_READY)
-        return;
-    // If ON
-    if (state == ON)
-    {
-
-    }
-    // If OFF
-    else if (state == OFF)
-    {
-
-    }
+    
 }
+
 void preKSPConnectionLoop()
 {
-    delay(200);
     Input.update();
     Output.update();
 
-    String line1, line2, line3, line4;
-
-    print(line1);
-
-    line2 = "True state: " + String(Input.getTestSwitch(0)); // 1, 0
-    print(line2);
-
-    line3 = "State: " + String(Input.getTestSwitch(1)); // 1, 0
-    print(line3);
-    //                                                             ON, OFF, NOT READY
-    line4 = "Virtual State: " + String(Input.getTestSwitch(2)); // 1,  0,   255
-    print(line4);
-
-
+    // INPUT READ EXAMPLE
+    byte val = Input.getTestSwitch();
+    switch (val)
+    {
+    case NOT_READY:
+        break;
+    case ON:
+        Output.setTestLED(true);
+        break;
+    case OFF:
+        Output.setTestLED(false);
+        break;
+    default:
+        break;
+    }
 }
 void loop() 
 {
@@ -224,7 +191,8 @@ void loop()
 
     ////// Set things //////
     
-    setCAG();
+    //setCAG();
+    setStage();
 
     // Update output to controller (Refresh controller)
     Output.update();
@@ -237,6 +205,35 @@ void loop()
         printHz();
 }
 
+void initIO()
+{
+    // Initialize Output
+    Output.init();
+    // Initialize Input
+    Input.init();
+
+    // Test Output
+    testOutput();
+    // Test Input
+    // NOT IMPLEMENTED
+
+    Output.update();
+    Input.update();
+}
+void initSimpit()
+{
+    // Wait for a connection to ksp
+    while (!mySimpit.init())
+    {
+        //preKSPConnectionLoop();
+    }
+    // Show that the controller has connected
+    mySimpit.printToKSP("KSP Controller Connected!", PRINT_TO_SCREEN);
+    // Register a method for receiving simpit message from ksp
+    mySimpit.inboundHandler(myCallbackHandler);
+    // Register the simpit channels
+    registerSimpitChannels();
+}
 void testOutput()
 {
     // Test output leds
@@ -273,7 +270,7 @@ void testOutput()
 
 void print(String x) 
 { 
-    Serial.println(x); 
+    Serial.println("\t" + x);
 }
 
 void printHz()
@@ -297,12 +294,78 @@ void printHz()
 
 void waitForInputEnable()
 {
+
+    //Things to check
+    //All input state that are toggled
+    /*
+
+
+    SAS
+    RCS
+    Phys warp
+    Warp lock
+    Nav
+    View
+    Throttle Lock
+    
+    Optional:
+    Throttle Position
+
+
+    */
+
+
+    
+    
+
+
+
+
+    
+
+    // Deavtivate controller
     mySimpit.printToKSP("Input deactivated!", PRINT_TO_SCREEN);
-    mySimpit.printToKSP("Please reset controller to correct state. Press the input enable button.", PRINT_TO_SCREEN);
+    Input.setAllVPinsReady();
+
+    mySimpit.printToKSP("Please reset controller to correct state., then press the Input Enable Button.", PRINT_TO_SCREEN);
     // Wait for user to reset controller to default and then press Input enable button
-    while (!Input.getInputEnableButton());
+    while (true)
+    {
+        if (checkInput(Input.getGearSwitch(false), ag.isGear, "OFF", "ON", "Gear Switch") &&
+            checkInput(Input.getLightsSwitch(false), ag.isLights, "OFF", "ON", "Lights Switch") &&
+            checkInput(Input.getBrakeSwitch(false), ag.isBrake, "OFF", "ON", "Brake") //&&
+            //checkInput()
+            )
+            break;
+        else
+        {
+            waitForInputEnable();
+            return;
+        }
+    }
     mySimpit.printToKSP("Input activated!", PRINT_TO_SCREEN);
     // Success!
+
+}
+bool checkInput(byte current, bool correct, String disabled, String enabled, String name)
+{
+    if (current == 255)
+    {
+        // THIS SHOULD NEVER HAPPEN
+    }
+    if ((current && correct) || (!current && !correct))
+    {
+        // Set correctly
+        mySimpit.printToKSP("GOOD: " + name + " is set correctly.", PRINT_TO_SCREEN);
+        return true;
+    }
+    else
+    {
+        // User needs to put gear in the correct posisition
+        String pos = current ? disabled : enabled;
+        mySimpit.printToKSP("BAD: Please update the " + name + " to the " + pos + " position.", PRINT_TO_SCREEN);
+        return false;
+    }
 }
 
 #pragma region Ksp Simpit
@@ -591,6 +654,116 @@ void registerSimpitChannels()
 
 #pragma endregion
 
+void updateStates()
+{
+    /*
+    // Inputs
+     // Test Buttons
+    isTestButton = getTestButton();
+    isTestSwitch = getTestSwitch();
+
+    // Miscellaneous
+    isDebugSwitch = getDebugSwitch();
+    isSoundSwitch = getSoundSwitch();
+    isInputEnableButton = getInputEnableButton();
+
+    // Warnings
+    isTempWarningButton = getTempWarningButton();
+    isGeeWarningButton = getGeeWarningButton();
+    isWarpWarningButton = getWarpWarningButton();
+    isBrakeWarningButton = getBrakeWarningButton();
+    isSASWarningButton = getSASWarningButton();
+    isRCSWarningButton = getRCSWarningButton();
+    isGearWarningButton = getGearWarningButton();
+    isCommsWarningButton = getCommsWarningButton();
+    isAltWarningButton = getAltWarningButton();
+    isPitchWarningButton = getPitchWarningButton();
+
+    // Display Controls
+    isGetInfoMode = getInfoMode();
+    isGetDirectionMode = getDirectionMode();
+    isGetStageViewSwitch = getStageViewSwitch();
+    isGetVerticalVelocitySwitch = getVerticalVelocitySwitch();
+    isGetReferenceModeButton = getReferenceModeButton();
+    isGetRadarAltitudeSwitch = getRadarAltitudeSwitch();
+
+    // Staging
+    isGetStageButton = getStageButton();
+    isGetStageLockSwitch = getStageLockSwitch();
+
+    // Aborting
+    isGetAbortButton = getAbortButton();
+    isGetAbortLockSwitch = getAbortLockSwitch();
+
+    // Custom Action Groups
+    isGetCAG1 = getCAG1();
+    isGetCAG2 = getCAG2();
+    isGetCAG3 = getCAG3();
+    isGetCAG4 = getCAG4();
+    isGetCAG5 = getCAG5();
+    isGetCAG6 = getCAG6();
+    isGetCAG7 = getCAG7();
+    isGetCAG8 = getCAG8();
+    isGetCAG9 = getCAG9();
+    isGetCAG10 = getCAG10();
+
+    // Other Action Groups
+    isGetDockingSwitch = getDockingSwitch();
+     = getPercisionSwitch();
+     = getLightsSwitch();
+     = getGearSwitch();
+     = getBrakeSwitch();
+
+    // View
+     = getScreenshotButton();
+     = getUISwitch();
+     = getNavSwitch();
+     = getViewSwitch();
+     = getFocusButton();
+     = getCamModeButton();
+     = getCamResetButton();
+     = getEnableLookButton();
+
+    // Warping & Pause
+     = getWarpLockSwitch();
+     = getPhysWarpSwitch();
+     = getCancelWarpButton();
+     = getDecreaseWarpButton();
+     = getIncreaseWarpButton();
+     = getPauseButton();
+
+    // SAS & RCS
+     = getSASStabilityAssistButton();
+     = getSASManeuverButton();
+     = getSASProgradeButton();
+     = getSASRetrogradeButton();
+     = getSASNormalButton();
+     = getSASAntiNormalButton();
+     = getSASRadialInButton();
+     = getSASRadialOutButton();
+     = getSASTargetButton();
+     = getSASAntiTargetButton();
+     = getSASSwitch();
+     = getRCSSwitch();
+
+    // EVA Specific Controls
+     = getBoardButton();
+     = getGrabButton();
+     = getJumpButton();
+
+    // Throttle
+     = getThrottleLockSwitch();
+
+    // Translation
+     = getTransHoldButton();
+     = getTransResetButton();
+
+    // Rotation
+     = getRotHoldButton();
+     = getRotResetButton();
+     */
+}
+
 void updateAllChecks()
 {
 
@@ -684,14 +857,36 @@ void setInfoMode()
 }
 void setReferenceMode()
 {
-    if (Input.getReferenceModeButton())
+    byte val = Input.getReferenceModeButton();
+    switch (val)
+    {
+    case NOT_READY:
+        break;
+    case ON:
         mySimpit.cycleNavBallMode();
+        break;
+    case OFF:
+        // Ignore
+        break;
+    default:
+        break;
+    }
 }
 void setRadarAlt()
 {
-    if (Input.getRadarAltitudeSwitch())
+    byte val = Input.getRadarAltitudeSwitch();
+    switch (val)
     {
+    case NOT_READY:
+        break;
+    case ON:
 
+        break;
+    case OFF:
+
+        break;
+    default:
+        break;
     }
 }
 void setVerticalVelocity()
@@ -1052,29 +1247,62 @@ void setDirectionLCD()
 void setSFLEDs()
 {
     bool newLEDs[20];
-    if (!Input.getStageViewSwitch())
-        calcResource(solidFuelMsg.total, solidFuelMsg.available, newLEDs);
-    else
+    byte val = Input.getStageViewSwitch();
+    switch (val)
+    {
+    case NOT_READY:
+        break;
+    case ON:
         calcResource(solidFuelStageMsg.total, solidFuelStageMsg.available, newLEDs);
-    Output.setSolidFuelLEDs(newLEDs);
+        Output.setSolidFuelLEDs(newLEDs);
+        break;
+    case OFF:
+        calcResource(solidFuelMsg.total, solidFuelMsg.available, newLEDs);
+        Output.setSolidFuelLEDs(newLEDs);
+        break;
+    default:
+        break;
+    }
 }
 void setLFLEDs()
 {
     bool newLEDs[20]; 
-    if (!Input.getStageViewSwitch())
-        calcResource(liquidFuelMsg.total, liquidFuelMsg.available, newLEDs);
-    else
+    byte val = Input.getStageViewSwitch();
+    switch (val)
+    {
+    case NOT_READY:
+        break;
+    case ON:
         calcResource(liquidFuelStageMsg.total, liquidFuelStageMsg.available, newLEDs);
-    Output.setLiquidFuelLEDs(newLEDs);
+        Output.setLiquidFuelLEDs(newLEDs);
+        break;
+    case OFF:
+        calcResource(liquidFuelMsg.total, liquidFuelMsg.available, newLEDs);
+        Output.setLiquidFuelLEDs(newLEDs);
+        break;
+    default:
+        break;
+    }
 }
 void setOXLEDs()
 {
     bool newLEDs[20];
-    if (!Input.getStageViewSwitch())
-        calcResource(oxidizerMsg.total, oxidizerMsg.available, newLEDs);
-    else
+    byte val = Input.getStageViewSwitch();
+    switch (val)
+    {
+    case NOT_READY:
+        break;
+    case ON:
         calcResource(oxidizerStageMsg.total, oxidizerStageMsg.available, newLEDs);
-    Output.setOxidizerLEDs(newLEDs);
+        Output.setOxidizerLEDs(newLEDs);
+        break;
+    case OFF:
+        calcResource(oxidizerMsg.total, oxidizerMsg.available, newLEDs);
+        Output.setOxidizerLEDs(newLEDs);
+        break;
+    default:
+        break;
+    }
 }
 void setMPLEDs()
 {
@@ -1091,67 +1319,97 @@ void setECLEDs()
     calcResource(electricityMsg.total, electricityMsg.available, newLEDs);
     Output.setElectricityLEDs(newLEDs);
 }
-void calcResource(float total, float avail, bool * newLEDs)
-{
-    double percentFull = 0.0;
-    double amt = 0.0;
-
-    percentFull = getPercent(total, avail);
-    amt = 20 - PercentageToValue(20, percentFull);
-
-    for (int i = 20; i > 0; i--)
-    {
-        if (i > amt)
-            newLEDs[i] = true;
-        else
-            newLEDs[i] = false;
-    }
-}
 // Other action groups
 void setStage()
 {
-    // Staging
-    if (!Input.getStageLockSwitch())
+    byte lock = Input.getStageLockSwitch(false);
+    mySimpit.printToKSP("LOCK: " + String(lock), PRINT_TO_SCREEN);
+    switch (lock)
     {
+    case NOT_READY:
+        break;
+    case ON:
         Output.setStageLED(true);
-        if (Input.getStageButton())
+        if (Input.getStageButton() == ON)
             mySimpit.activateAction(STAGE_ACTION);
-    }
-    else
+        break;
+    case OFF:
         Output.setStageLED(false);
+        break;
+    default:
+        break;
+    }
 }
 void setAbort()
 {
-    // Aborting
-    if (!Input.getAbortLockSwitch())
+    byte lock = Input.getAbortLockSwitch();
+    switch (lock)
     {
+    case NOT_READY:
+        break;
+    case ON:
         Output.setAbortLED(true);
-        if (Input.getAbortButton())
+        if (Input.getAbortButton() == ON)
             mySimpit.activateAction(ABORT_ACTION);
-    }
-    else
+        break;
+    case OFF:
         Output.setAbortLED(false);
+        break;
+    default:
+        break;
+    }
 }
 void setLights()
 {
-    if (Input.getLightsSwitch())
+    byte val = Input.getLightsSwitch();
+    switch (val)
+    {
+    case NOT_READY:
+        break;
+    case ON:
         mySimpit.activateAction(LIGHT_ACTION);
-    else
+        break;
+    case OFF:
         mySimpit.deactivateAction(LIGHT_ACTION);
+        break;
+    default:
+        break;
+    }
 }
 void setGear()
 {
-    if (Input.getGearSwitch())
+    byte val = Input.getGearSwitch();
+    switch (val)
+    {
+    case NOT_READY:
+        break;
+    case ON:
         mySimpit.activateAction(GEAR_ACTION);
-    else
+        break;
+    case OFF:
         mySimpit.deactivateAction(GEAR_ACTION);
+        break;
+    default:
+        break;
+    }
 }
 void setBrake()
 {
-    if (Input.getBrakeSwitch())
+    byte val = Input.getBrakeSwitch();
+    switch (val)
+    {
+    case NOT_READY:
+        break;
+    case ON:
         mySimpit.activateAction(BRAKES_ACTION);
-    else
+        break;
+    case OFF:
         mySimpit.deactivateAction(BRAKES_ACTION);
+        break;
+    default:
+        break;
+    }
+
     if (ag.isBrake)
         Output.setBrakeWarningLED(true);
     else
@@ -1160,75 +1418,102 @@ void setBrake()
 // Custom
 void setDocking()
 {
-    if (Input.getDockingSwitch())
+    byte val = Input.getDockingSwitch();
+    switch (val)
     {
-        // NOT IMPLEMENTED
-    }
-    else
-    {
+    case NOT_READY:
+        break;
+    case ON:
+
+        break;
+    case OFF:
+
+        break;
+    default:
+        break;
     }
 }
 // Custom action groups
 void setCAG()
 {
     // Custom Action Groups
-    if (Input.getCAG1())
+
+    if (Input.getCAG1() == ON)
         mySimpit.toggleCAG(1);
-    if (Input.getCAG2())
+
+    if (Input.getCAG2() == ON)
         mySimpit.toggleCAG(2);
-    if (Input.getCAG3())
+
+    if (Input.getCAG3() == ON)
         mySimpit.toggleCAG(3);
-    if (Input.getCAG4())
+
+    if (Input.getCAG4() == ON)
         mySimpit.toggleCAG(4);
-    if (Input.getCAG5())
+
+    if (Input.getCAG5() == ON)
         mySimpit.toggleCAG(5);
-    if (Input.getCAG6())
+
+    if (Input.getCAG6() == ON)
         mySimpit.toggleCAG(6);
-    if (Input.getCAG7())
+
+    if (Input.getCAG7() == ON)
         mySimpit.toggleCAG(7);
-    if (Input.getCAG8())
+
+    if (Input.getCAG8() == ON)
         mySimpit.toggleCAG(8);
-    if (Input.getCAG9())
+
+    if (Input.getCAG9() == ON)
         mySimpit.toggleCAG(9);
-    if (Input.getCAG10())
+
+    if (Input.getCAG10() == ON)
         mySimpit.toggleCAG(10);
+
 
     if (cagStatusMsg.is_action_activated(cagStatusMsg.status[0]))
         Output.setCAG1LED(true);
     else
         Output.setCAG1LED(false);
+
     if (cagStatusMsg.is_action_activated(cagStatusMsg.status[1]))
         Output.setCAG2LED(true);
     else
         Output.setCAG2LED(false);
+
     if (cagStatusMsg.is_action_activated(cagStatusMsg.status[2]))
         Output.setCAG3LED(true);
     else
         Output.setCAG3LED(false);
+
     if (cagStatusMsg.is_action_activated(cagStatusMsg.status[3]))
         Output.setCAG4LED(true);
     else
         Output.setCAG4LED(false);
+
     if (cagStatusMsg.is_action_activated(cagStatusMsg.status[4]))
         Output.setCAG5LED(true);
     else
         Output.setCAG5LED(false);
+
     if (cagStatusMsg.is_action_activated(cagStatusMsg.status[5]))
         Output.setCAG6LED(true);
     else
         Output.setCAG6LED(false);
+
     if (cagStatusMsg.is_action_activated(cagStatusMsg.status[6]))
         Output.setCAG7LED(true);
     else
         Output.setCAG7LED(false);
+
     if (cagStatusMsg.is_action_activated(cagStatusMsg.status[7]))
         Output.setCAG8LED(true);
     else
         Output.setCAG8LED(false);
+
     if (cagStatusMsg.is_action_activated(cagStatusMsg.status[8]))
         Output.setCAG9LED(true);
     else
         Output.setCAG9LED(false);
+
     if (cagStatusMsg.is_action_activated(cagStatusMsg.status[9]))
         Output.setCAG10LED(true);
     else
@@ -1237,59 +1522,89 @@ void setCAG()
 // View
 void setCamReset()
 {
-    if (Input.getCamResetButton())
-    {
+    if (Input.getCamResetButton() == ON)
         mySimpit.setCameraMode(FLIGHT_CAMERA_AUTO);
-    }
 }
 void setCamMode()
 {
-    if (Input.getCamModeButton())
-    {
+    if (Input.getCamModeButton() == ON)
         mySimpit.setCameraMode(CAMERA_NEXT_MODE);
-    }
 }
 void setFocus()
 {
-    if (Input.getFocusButton()) {}
+    if (Input.getFocusButton() == ON) {}
 }
 void setView()
 {
-    if (Input.getViewSwitch())
+    byte val = Input.getViewSwitch();
+    switch (val)
     {
-        // External
-    }
-    else
-    {
-        // Internal (IVA)
+    case NOT_READY:
+        break;
+    case ON: // External
+
+        break;
+    case OFF: // Internal (IVA)
+
+        break;
+    default:
+        break;
     }
 }
 void setNav()
 {
-    if (Input.getNavSwitch())
+    byte val = Input.getNavSwitch();
+    switch (val)
     {
+    case NOT_READY:
+        break;
+    case ON: // Map
 
+        break;
+    case OFF: // Flight View
+
+        break;
+    default:
+        break;
     }
 }
 void setUI()
 {
-    if (Input.getUISwitch()) {}
+    byte val = Input.getUISwitch();
+    switch (val)
+    {
+    case NOT_READY:
+        break;
+    case ON: // Show UI
+
+        break;
+    case OFF: // Disable UI
+
+        break;
+    default:
+        break;
+    }
 }
 void setScreenshot()
 {
-    if (Input.getScreenshotButton()) {}
+    if (Input.getScreenshotButton() == ON) {}
 }
 // Warping & Pause
 void setWarp()
 {
     timewarpMessage twMsg;
+    byte lock = Input.getWarpLockSwitch();
 
-    if (!Input.getWarpLockSwitch() || Input.getCancelWarpButton())
+    // Cancel Warp
+    if (lock == OFF || Input.getCancelWarpButton() == ON)
     {
         twMsg.command = TIMEWARP_X1;
         mySimpit.send(TIMEWARP_MESSAGE, twMsg);
         return;
     }
+    // This is different than before, this will not return NOT_READY
+    if (Input.getWarpLockSwitch(false) == OFF) 
+        return; // Ignore rest
 
     if (Input.getPhysWarpSwitch())
     {
@@ -1552,6 +1867,22 @@ int16_t smoothAndMapAxis(int raw)//, bool isSmooth = true)
     return mappedAndSmoothed;
 }
 
+void calcResource(float total, float avail, bool* newLEDs)
+{
+    double percentFull = 0.0;
+    double amt = 0.0;
+
+    percentFull = getPercent(total, avail);
+    amt = 20 - PercentageToValue(20, percentFull);
+
+    for (int i = 20; i > 0; i--)
+    {
+        if (i > amt)
+            newLEDs[i] = true;
+        else
+            newLEDs[i] = false;
+    }
+}
 
 /// <summary>Format numbers for lcd. Length max is 16 characters.This will fit a number to a character range,
 /// the number will be to the right of the excess characters. 

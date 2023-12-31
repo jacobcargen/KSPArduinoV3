@@ -31,119 +31,119 @@ class InputClass
  public:
 
 	 void init();
-
 	 void update();
+     void setAllVPinsReady();
 
      // Test Buttons
-     byte getTestButton();
-     byte getTestSwitch(byte state);
+     byte getTestButton(bool waitForChange = true);
+     byte getTestSwitch(bool waitForChange = true);
 
      // Miscellaneous
-     byte getDebugSwitch();
-     byte getSoundSwitch();
-     byte getInputEnableButton();
+     byte getDebugSwitch(bool waitForChange = true);
+     byte getSoundSwitch(bool waitForChange = true);
+     byte getInputEnableButton(bool waitForChange = true);
 
      // Warnings
-     byte getTempWarningButton();
-     byte getGeeWarningButton();
-     byte getWarpWarningButton();
-     byte getBrakeWarningButton();
-     byte getSASWarningButton();
-     byte getRCSWarningButton();
-     byte getGearWarningButton();
-     byte getCommsWarningButton();
-     byte getAltWarningButton();
-     byte getPitchWarningButton();
+     byte getTempWarningButton(bool waitForChange = true);
+     byte getGeeWarningButton(bool waitForChange = true);
+     byte getWarpWarningButton(bool waitForChange = true);
+     byte getBrakeWarningButton(bool waitForChange = true);
+     byte getSASWarningButton(bool waitForChange = true);
+     byte getRCSWarningButton(bool waitForChange = true);
+     byte getGearWarningButton(bool waitForChange = true);
+     byte getCommsWarningButton(bool waitForChange = true);
+     byte getAltWarningButton(bool waitForChange = true);
+     byte getPitchWarningButton(bool waitForChange = true);
 
      // Display Controls
      byte getInfoMode();
      byte getDirectionMode();
-     byte getStageViewSwitch();
-     byte getVerticalVelocitySwitch();
-     byte getReferenceModeButton(); // WIP
-     byte getRadarAltitudeSwitch();
+     byte getStageViewSwitch(bool waitForChange = true);
+     byte getVerticalVelocitySwitch(bool waitForChange = true);
+     byte getReferenceModeButton(bool waitForChange = true);
+     byte getRadarAltitudeSwitch(bool waitForChange = true);
 
      // Staging
-     byte getStageButton(); // done
-     byte getStageLockSwitch(); // done
+     byte getStageButton(bool waitForChange = true);
+     byte getStageLockSwitch(bool waitForChange = true);
 
      // Aborting
-     byte getAbortButton(); // done
-     byte getAbortLockSwitch(); // done
+     byte getAbortButton(bool waitForChange = true);
+     byte getAbortLockSwitch(bool waitForChange = true);
 
      // Custom Action Groups
-     byte getCAG1(); // done
-     byte getCAG2(); // done
-     byte getCAG3(); // done
-     byte getCAG4(); // done
-     byte getCAG5(); // done
-     byte getCAG6(); // done
-     byte getCAG7(); // done
-     byte getCAG8(); // done
-     byte getCAG9(); // done
-     byte getCAG10(); // done
+     byte getCAG1(bool waitForChange = true); 
+     byte getCAG2(bool waitForChange = true); 
+     byte getCAG3(bool waitForChange = true); 
+     byte getCAG4(bool waitForChange = true); 
+     byte getCAG5(bool waitForChange = true); 
+     byte getCAG6(bool waitForChange = true); 
+     byte getCAG7(bool waitForChange = true); 
+     byte getCAG8(bool waitForChange = true); 
+     byte getCAG9(bool waitForChange = true); 
+     byte getCAG10(bool waitForChange = true);
 
      // Other Action Groups
-     byte getDockingSwitch(); // WIP
-     byte getPercisionSwitch(); // done
-     byte getLightsSwitch(); // done
-     byte getGearSwitch(); // done
-     byte getBrakeSwitch(); // done
+     byte getDockingSwitch(bool waitForChange = true);
+     byte getPercisionSwitch(bool waitForChange = true);
+     byte getLightsSwitch(bool waitForChange = true);
+     byte getGearSwitch(bool waitForChange = true);
+     byte getBrakeSwitch(bool waitForChange = true);
 
      // View
-     byte getScreenshotButton();
-     byte getUISwitch();
-     byte getNavSwitch();
-     byte getViewSwitch();
-     byte getFocusButton();
-     byte getCamModeButton();
-     byte getCamResetButton();
-     byte getEnableLookButton(); // WIP
+     byte getScreenshotButton(bool waitForChange = true);
+     byte getUISwitch(bool waitForChange = true);
+     byte getNavSwitch(bool waitForChange = true);
+     byte getViewSwitch(bool waitForChange = true);
+     byte getFocusButton(bool waitForChange = true);
+     byte getCamModeButton(bool waitForChange = true);
+     byte getCamResetButton(bool waitForChange = true);
+     byte getEnableLookButton(bool waitForChange = true);
 
      // Warping & Pause
-     byte getWarpLockSwitch();
-     byte getPhysWarpSwitch();
-     byte getCancelWarpButton();
-     byte getDecreaseWarpButton();
-     byte getIncreaseWarpButton();
-     byte getPauseButton();
+     byte getWarpLockSwitch(bool waitForChange = true);
+     byte getPhysWarpSwitch(bool waitForChange = true);
+     byte getCancelWarpButton(bool waitForChange = true);
+     byte getDecreaseWarpButton(bool waitForChange = true);
+     byte getIncreaseWarpButton(bool waitForChange = true);
+     byte getPauseButton(bool waitForChange = true);
 
      // SAS & RCS
-     byte getSASStabilityAssistButton(); // done
-     byte getSASManeuverButton();         // done
-     byte getSASProgradeButton();         // done
-     byte getSASRetrogradeButton();       // done
-     byte getSASNormalButton();           // done
-     byte getSASAntiNormalButton();       // done
-     byte getSASRadialInButton();         // done
-     byte getSASRadialOutButton();        // done
-     byte getSASTargetButton();           // done
-     byte getSASAntiTargetButton();       // done
-     byte getSASSwitch();                 // done
-     byte getRCSSwitch();                 // done
+     byte getSASStabilityAssistButton(bool waitForChange = true);
+     byte getSASManeuverButton(bool waitForChange = true);
+     byte getSASProgradeButton(bool waitForChange = true);
+     byte getSASRetrogradeButton(bool waitForChange = true);
+     byte getSASNormalButton(bool waitForChange = true);
+     byte getSASAntiNormalButton(bool waitForChange = true);
+     byte getSASRadialInButton(bool waitForChange = true);
+     byte getSASRadialOutButton(bool waitForChange = true);
+     byte getSASTargetButton(bool waitForChange = true);
+     byte getSASAntiTargetButton(bool waitForChange = true);
+     byte getSASSwitch(bool waitForChange = true);
+     byte getRCSSwitch(bool waitForChange = true);
 
      // EVA Specific Controls
-     byte getBoardButton();
-     byte getGrabButton();
-     byte getJumpButton();
+     byte getBoardButton(bool waitForChange = true);
+     byte getGrabButton(bool waitForChange = true);
+     byte getJumpButton(bool waitForChange = true);
 
      // Throttle
-     int getThrottleAxis(); // done
-     byte getThrottleLockSwitch(); // done
+     int getThrottleAxis(); 
+     byte getThrottleLockSwitch(bool waitForChange = true);
 
      // Translation
-     int getTranslationXAxis(); // done
-     int getTranslationYAxis(); // done
-     int getTranslationZAxis(); // done
-     byte getTransHoldButton(); // WIP
-     byte getTransResetButton(); // WIP
+     int getTranslationXAxis(); 
+     int getTranslationYAxis(); 
+     int getTranslationZAxis(); 
+     byte getTransHoldButton(bool waitForChange = true);
+     byte getTransResetButton(bool waitForChange = true);
 
      // Rotation
-     int getRotationXAxis(); // done
-     int getRotationYAxis(); // done
-     int getRotationZAxis(); // done
-     byte getRotHoldButton(); // WIP
-     byte getRotResetButton(); // WIP
+     int getRotationXAxis(); 
+     int getRotationYAxis(); 
+     int getRotationZAxis(); 
+     byte getRotHoldButton(bool waitForChange = true);
+     byte getRotResetButton(bool waitForChange = true);
 
 
 	 ~InputClass();  // Destructor declaration

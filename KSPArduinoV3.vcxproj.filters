@@ -337,5 +337,8 @@
     <Text Include="..\..\..\Documents\Arduino\libraries\arduino-timer\keywords.txt">
       <Filter>src\_micro-api-readonly\libraries\arduino-timer</Filter>
     </Text>
+    <Text Include="board.txt">
+      <Filter>Misc Files</Filter>
+    </Text>
   </ItemGroup>
 </Project>
