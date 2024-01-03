@@ -128,15 +128,30 @@ int previousMillis;
 
 bool isDebugMode = true;
 
+
+
+/////////////////////////////////////////////////////////////////
+////////////////////////// Functions ////////////////////////////
+/////////////////////////////////////////////////////////////////
+
 void setup()
 {
     // Open up the serial port
     Serial.begin(115200);
-
+    // Init I/O
     initIO();
 
+    //Output.setTestLCD("TEST1 Test1", "TEST2 test2");
+    String x = "ABCDEFGHIJKLMNOP";
+    Output.setSpeedLCD(x, x);
+    Output.setAltitudeLCD(x, x);
+    Output.setHeadingLCD(x, x);
+    Output.setDirectionLCD(x, x);
+    Output.setInfoLCD(x, x);
+    Output.update();
+
     //while (true)
-        //preKSPConnectionLoop();
+    //    preKSPConnectionLoop();
 
     ///// Initialize Simpit
     initSimpit();
@@ -148,36 +163,9 @@ void setup()
     //waitForInputEnable();
     mySimpit.update();
 
-
     // Initialization complete
     mySimpit.printToKSP("Initialization Complete!", PRINT_TO_SCREEN);
 
-
-
-
-    
-}
-
-void preKSPConnectionLoop()
-{
-    Input.update();
-    Output.update();
-
-    // INPUT READ EXAMPLE
-    byte val = Input.getTestSwitch();
-    switch (val)
-    {
-    case NOT_READY:
-        break;
-    case ON:
-        Output.setTestLED(true);
-        break;
-    case OFF:
-        Output.setTestLED(false);
-        break;
-    default:
-        break;
-    }
 }
 void loop() 
 {
@@ -190,20 +178,19 @@ void loop()
     Input.update();
 
     ////// Set things //////
-    
-    //setCAG();
-    setStage();
+
 
     // Update output to controller (Refresh controller)
     Output.update();
     
     // Update simpit
     mySimpit.update();
-
+    printHz("");
 
     if (isDebugMode)
-        printHz();
+        printHz("Loop Time");
 }
+
 
 void initIO()
 {
@@ -219,20 +206,6 @@ void initIO()
 
     Output.update();
     Input.update();
-}
-void initSimpit()
-{
-    // Wait for a connection to ksp
-    while (!mySimpit.init())
-    {
-        //preKSPConnectionLoop();
-    }
-    // Show that the controller has connected
-    mySimpit.printToKSP("KSP Controller Connected!", PRINT_TO_SCREEN);
-    // Register a method for receiving simpit message from ksp
-    mySimpit.inboundHandler(myCallbackHandler);
-    // Register the simpit channels
-    registerSimpitChannels();
 }
 void testOutput()
 {
@@ -267,13 +240,58 @@ void testOutput()
     Output.update();
     delay(500);
 }
+void preKSPConnectionLoop()
+{
+    //Input.update();
+    //Output.update();
+    //printHz("Loop Time: ");
+
+
+    
+
+
+
+
+
+
+
+    //setStage();
+    /*
+    // INPUT READ EXAMPLE
+    byte val = Input.getTestSwitch();
+    switch (val)
+    {
+    case NOT_READY:
+        break;
+    case ON:
+        Output.setTestLED(true);
+        break;
+    case OFF:
+        Output.setTestLED(false);
+        break;
+    default:
+        break;
+    }
+    */
+}
+void initSimpit()
+{
+    // Wait for a connection to ksp
+    while (!mySimpit.init());
+    // Show that the controller has connected
+    mySimpit.printToKSP("KSP Controller Connected!", PRINT_TO_SCREEN);
+    // Register a method for receiving simpit message from ksp
+    mySimpit.inboundHandler(myCallbackHandler);
+    // Register the simpit channels
+    registerSimpitChannels();
+}
+
 
 void print(String x) 
 { 
     Serial.println("\t" + x);
 }
-
-void printHz()
+void printHz(String customTxt)
 {
     // Measure the current time
     unsigned long currentMillis = millis();
@@ -283,15 +301,14 @@ void printHz()
 
     // Print the loop rate (inverse of the elapsed time)
     float loopRate = 1000.0 / elapsedTime;  // Convert to loops per second (Hz)
-    Serial.print("");
-    Serial.print(loopRate);
+    Serial.print(String(customTxt));
+    Serial.print(String(loopRate));
     Serial.println(" Hz");
 
-    mySimpit.printToKSP("Loop Rate: " + String(loopRate) + " Hz", PRINT_TO_SCREEN);
+    //mySimpit.printToKSP(String(customTxt) + ": " + String(loopRate) + " Hz", PRINT_TO_SCREEN);
     // Update the previous timestamp for the next iteration
     previousMillis = currentMillis;
 }
-
 void waitForInputEnable()
 {
 
@@ -763,7 +780,6 @@ void updateStates()
      = getRotResetButton();
      */
 }
-
 void updateAllChecks()
 {
 
@@ -792,10 +808,10 @@ void updateAllChecks()
     setAltWarningCancel();        // WIP
     setPitchWarningCancel();      // WIP
     // Display Controls
-    setInfoMode();
-    setDirectionMode();
+    updateInfoMode();
+    updateDirectionMode();
     setVerticalVelocity();
-    setReferenceMode();
+    updateReferenceMode();
     setRadarAlt();
     // Resources
     setLFLEDs(); // working
@@ -847,49 +863,24 @@ void updateAllChecks()
     setRotationHold();
 }
 
-void setDirectionMode()
+void updateDirectionMode()
 {
     switch (Input.getDirectionMode()) {}
 }
-void setInfoMode()
+void updateInfoMode()
 {
     infoMode = Input.getInfoMode();
 }
-void setReferenceMode()
+void updateReferenceMode()
 {
-    byte val = Input.getReferenceModeButton();
-    switch (val)
-    {
-    case NOT_READY:
-        break;
-    case ON:
+    if (Input.getReferenceModeButton())
         mySimpit.cycleNavBallMode();
-        break;
-    case OFF:
-        // Ignore
-        break;
-    default:
-        break;
-    }
 }
-void setRadarAlt()
+void setRadarAlt() // Should be used as a check in another update
 {
-    byte val = Input.getRadarAltitudeSwitch();
-    switch (val)
-    {
-    case NOT_READY:
-        break;
-    case ON:
-
-        break;
-    case OFF:
-
-        break;
-    default:
-        break;
-    }
+    //Input.getRadarAltitudeSwitch(false);
 }
-void setVerticalVelocity()
+void setVerticalVelocity() // Should be used as a check in another update
 {
     /*
     if (Input.getVerticalVelocitySwitch())
@@ -1094,7 +1085,6 @@ void setSpeedLCD()
 }
 void setAltitufeLCD()
 {
-    /*
     // Alt
     int altitude;
     // Clear the strings
@@ -1128,7 +1118,6 @@ void setAltitufeLCD()
         botTxt += "m";
     }
     Output.setAltitudeLCD(topTxt, botTxt);
-    */
 }
 void setInfoLCD()
 {
@@ -1320,49 +1309,34 @@ void setECLEDs()
     Output.setElectricityLEDs(newLEDs);
 }
 // Other action groups
-void setStage()
+void setStage() // Should Work
 {
-    byte lock = Input.getStageLockSwitch(false);
-    mySimpit.printToKSP("LOCK: " + String(lock), PRINT_TO_SCREEN);
-    switch (lock)
+    byte stageLock = Input.getStageLockSwitch(false);
+    if (stageLock == ON)
     {
-    case NOT_READY:
-        break;
-    case ON:
         Output.setStageLED(true);
         if (Input.getStageButton() == ON)
             mySimpit.activateAction(STAGE_ACTION);
-        break;
-    case OFF:
-        Output.setStageLED(false);
-        break;
-    default:
-        break;
     }
+    else if (stageLock == OFF)
+        Output.setStageLED(false);
 }
-void setAbort()
+void setAbort() // Should Work
 {
-    byte lock = Input.getAbortLockSwitch();
-    switch (lock)
+    byte abortLock = Input.getAbortLockSwitch(false);
+    if (abortLock == ON)
     {
-    case NOT_READY:
-        break;
-    case ON:
         Output.setAbortLED(true);
         if (Input.getAbortButton() == ON)
             mySimpit.activateAction(ABORT_ACTION);
-        break;
-    case OFF:
-        Output.setAbortLED(false);
-        break;
-    default:
-        break;
     }
+    else if (abortLock == OFF)
+        Output.setAbortLED(false);
 }
-void setLights()
+void setLights() // Should Work
 {
-    byte val = Input.getLightsSwitch();
-    switch (val)
+    byte lightSwitch = Input.getLightsSwitch();
+    switch (lightSwitch)
     {
     case NOT_READY:
         break;
@@ -1376,7 +1350,7 @@ void setLights()
         break;
     }
 }
-void setGear()
+void setGear() // Needs Testing
 {
     byte val = Input.getGearSwitch();
     switch (val)

@@ -27,6 +27,7 @@ public:
 	void update();
 
 	void setTestLED(bool state);
+	void setTestLCD(String top, String bot);
 
 	void overrideSet(bool x[144]);
 	// Misc

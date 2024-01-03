@@ -51,10 +51,8 @@ const int TRANSLATION_BUTTON_PIN = A7;
 // Throttle Axis
 const int THROTTLE_AXIS_PIN = A8;
 // Test pins
-const byte TEST_BUTTON = 52;
+const byte TEST_BUTTON = 51;
 const byte TEST_SWITCH = 50;
-const byte TEST_PIN_40 = 40;
-const byte TEST_PIN_41 = 41;
 
 // Test states
 bool testButton, testSwitch;
@@ -74,7 +72,7 @@ int numPins = 0;
 /// <param name="referenceToBoolVal">Boolean varaible that holds the real state of the input.</param>
 /// <param name="virtualPin">What index to create this virtual pin at.</param>
 /// <param name="debounce">Debounce for this virtual pin.</param>
-void AddInput(bool& referenceToBoolVal, int virtualPin, int debounce = 50)
+void AddInput(bool& referenceToBoolVal, int virtualPin, int debounce = 150)
 {
     // Increase the size of the array if necessary
     int newSize = max(numPins + 1, virtualPin + 1);
@@ -109,18 +107,18 @@ ButtonState getVirtualPin(int virtualPin, bool waitForChange)
     if (((inputReading != pins[virtualPin].lastState) && 
          (millis() - pins[virtualPin].lastDebounceTime > pins[virtualPin].debounceDelay)))
     {
-        Serial.println("Changing last state");
+        // Serial.println("Changing last state");
         pins[virtualPin].lastState = inputReading;
         pins[virtualPin].lastDebounceTime = millis();
-        return pins[virtualPin].lastState ? ON : OFF;
+        return !pins[virtualPin].lastState ? ON : OFF;
     }
     if (!waitForChange)
     {
-        return pins[virtualPin].lastState ? ON : OFF;
+        return !pins[virtualPin].lastState ? ON : OFF;
     }
     return NOT_READY;
 }
-/// <summary> Initialize all of the virtual pins. </summary>
+/// <summary>Initialize all of the virtual pins.</summary>
 void initVirtualPins()
 {
     for (int i = 0; i < 64; i++)
@@ -238,10 +236,6 @@ void InputClass::init()
     pinMode(SHIFT_IN_B_CLOCK_PIN, OUTPUT);
     pinMode(SHIFT_IN_B_CLOCK_ENABLE_PIN, OUTPUT);
     pinMode(SHIFT_IN_B_LOAD_PIN, OUTPUT);
-
-    pinMode(TEST_PIN_40, INPUT_PULLUP);
-    pinMode(TEST_PIN_41, INPUT_PULLUP);
-
     // Init test Inputs
     pinMode(TEST_SWITCH, INPUT_PULLUP);
     pinMode(TEST_BUTTON, INPUT_PULLUP);
@@ -254,8 +248,6 @@ void InputClass::update()
             //SHIFT_IN_B_SERIAL_PIN, SHIFT_IN_B_CLOCK_ENABLE_PIN, SHIFT_IN_B_CLOCK_PIN, SHIFT_IN_B_LOAD_PIN);
 
     // Arduino Digital Pin reading
-    _sIA[17] = digitalRead(TEST_PIN_40);
-    _sIA[18] = digitalRead(TEST_PIN_41);
     testButton = digitalRead(TEST_BUTTON);
     testSwitch = digitalRead(TEST_SWITCH);
 

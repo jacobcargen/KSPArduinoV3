@@ -340,5 +340,8 @@
     <Text Include="board.txt">
       <Filter>Misc Files</Filter>
     </Text>
+    <Text Include="Checks.txt">
+      <Filter>Misc Files</Filter>
+    </Text>
   </ItemGroup>
 </Project>

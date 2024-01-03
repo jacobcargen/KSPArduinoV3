@@ -9,8 +9,128 @@
 #include <pins_arduino.h> 
 #include <variant.h> 
 #include <LiquidCrystal_I2C.h>
+/*
+enum ShiftOutAPins {
+    POWER_LED = 0,
+    SF_1 = 1,
+    SF_2 = 2,
+    SF_3 = 3,
+    SF_4 = 4,
+    SF_5 = 5,
+    SF_6 = 6,
+    SF_7 = 7,
+    SF_8 = 8,
+    SF_9 = 9,
+    SF_10 = 10,
+    SF_11 = 11,
+    SF_12 = 12,
+    SF_13 = 13,
+    SF_14 = 14,
+    SF_15 = 15,
+    SF_16 = 16,
+    SF_17 = 17,
+    SF_18 = 18,
+    SF_19 = 19,
+    SF_20 = 20,
+    LF_1 = 21,
+    LF_2 = 22,
+    LF_3 = 23,
+    LF_4 = 24,
+    LF_5 = 25,
+    LF_6 = 26,
+    LF_7 = 27,
+    LF_8 = 28,
+    LF_9 = 29,
+    LF_10 = 30,
+    LF_11 = 31,
+    LF_12 = 32,
+    LF_13 = 33,
+    LF_14 = 34,
+    LF_15 = 35,
+    LF_16 = 36,
+    LF_17 = 37,
+    LF_18 = 38,
+    LF_19 = 39,
+    LF_20 = 40,
+    OX_1 = 41,
+    OX_2 = 42,
+    OX_3 = 43,
+    OX_4 = 44,
+    OX_5 = 45,
+    OX_6 = 46,
+    OX_7 = 47,
+    OX_8 = 48,
+    OX_9 = 49,
+    OX_10 = 50,
+    OX_11 = 51,
+    OX_12 = 52,
+    OX_13 = 53,
+    OX_14 = 54,
+    OX_15 = 55,
+    OX_16 = 56,
+    OX_17 = 57,
+    OX_18 = 58,
+    OX_19 = 59,
+    OX_20 = 60,
+    MP_1 = 61,
+    MP_2 = 62,
+    MP_3 = 63,
+};
 
+enum ShiftOutBPins {
+    MP_4 = 0,
+    MP_5 = 1,
+    MP_6 = 2,
+    MP_7 = 3,
+    MP_8 = 4,
+    MP_9 = 5,
+    MP_10 = 6,
+    MP_11 = 7,
+    MP_12 = 8,
+    MP_13 = 9,
+    MP_14 = 10,
+    MP_15 = 11,
+    MP_16 = 12,
+    MP_17 = 13,
+    MP_18 = 14,
+    MP_19 = 15,
+    MP_20 = 16,
+    EC_1 = 17,
+    EC_2 = 18,
+    EC_3 = 19,
+    EC_4 = 20,
+    EC_5 = 21,
+    EC_6 = 22,
+    EC_7 = 23,
+    EC_8 = 24,
+    EC_9 = 25,
+    EC_10 = 26,
+    EC_11 = 27,
+    EC_12 = 28,
+    EC_13 = 29,
+    EC_14 = 30,
+    EC_15 = 31,
+    EC_16 = 32,
+    EC_17 = 33,
+    EC_18 = 34,
+    EC_19 = 35,
+    EC_20 = 36,
+    TempWarningLED = 37,
+    GeeWarningLED = 38,
+    WarpWarningLED = 39,
+    BrakeWarningLED = 40,
+    SASWarningLED
+    RCSWarningLED
+    GearWarningLED
+    CommsWarningLED
+    AltWarningLED
+    PitchWarningLED
+};
 
+enum ShiftOutCPins {
+    // Add enums for ShiftOutCPins here
+};
+*/
 #pragma region Shift Out Variables
 
 int const _SHIFT_OUT_A_DATA_PIN = 2;
@@ -46,6 +166,8 @@ LiquidCrystal_I2C _altitudeLCD(0x25, 16, 2);
 LiquidCrystal_I2C _infoLCD(0x23, 16, 2);
 // Direction LCD
 LiquidCrystal_I2C _directionLCD(0x22, 16, 2);
+// Test LCD
+LiquidCrystal_I2C _testLCD(0x24, 16, 2);
 
 // Text for speed lcd
 String _speedLCDTopTxt, _speedLCDBotTxt;
@@ -57,6 +179,8 @@ String _infoLCDTopTxt, _infoLCDBotTxt;
 String _headingLCDTopTxt, _headingLCDBotTxt;
 // Text for direction lcd
 String _directionLCDTopTxt, _directionLCDBotTxt;
+// Text for test lcd
+//String _testLCDTopTxt, _testLCDBotTxt;
 
 #pragma endregion
 
@@ -166,19 +290,20 @@ void OutputClass::init()
     }
     overrideSet(x);
     // LCDs
-    /*
     _headingLCD.begin();
     _speedLCD.begin();
     _altitudeLCD.begin();
     _infoLCD.begin();
     _directionLCD.begin();
+    //_testLCD.begin();
 
     _speedLCD.print("SPEED TEST");
     _headingLCD.print("HEADING TEST");
     _altitudeLCD.print("ALTITUDE TEST");
     _infoLCD.print("INFO TEST");
     _directionLCD.print("DIRECTION TEST");
-    */
+    //_testLCD.print("TEST TEST");
+
     // Shift register pins
     pinMode(_SHIFT_OUT_A_DATA_PIN, OUTPUT);
     pinMode(_SHIFT_OUT_A_LATCH_PIN, OUTPUT);
@@ -201,11 +326,13 @@ void OutputClass::init()
 /// <summary>Update the controller outputs.</summary>
 void OutputClass::update()
 {
-    //_sendLCD(_speedLCD, _speedLCDTopTxt, _speedLCDBotTxt);
-    //_sendLCD(_altitudeLCD, _altitudeLCDTopTxt, _altitudeLCDBotTxt);
-    //_sendLCD(_headingLCD, _headingLCDTopTxt, _headingLCDBotTxt);
-    //_sendLCD(_infoLCD, _infoLCDTopTxt, _infoLCDBotTxt);
-    //_sendLCD(_directionLCD, _directionLCDTopTxt, _directionLCDBotTxt);
+    _sendLCD(_speedLCD, _speedLCDTopTxt, _speedLCDBotTxt);
+    _sendLCD(_altitudeLCD, _altitudeLCDTopTxt, _altitudeLCDBotTxt);
+    _sendLCD(_headingLCD, _headingLCDTopTxt, _headingLCDBotTxt);
+    _sendLCD(_infoLCD, _infoLCDTopTxt, _infoLCDBotTxt);
+    _sendLCD(_directionLCD, _directionLCDTopTxt, _directionLCDBotTxt);
+    // Update test LCD
+    //_sendLCD(_testLCD, _testLCDTopTxt, _testLCDBotTxt);
 
     //_shiftOutB[48] = false;
 
@@ -213,6 +340,8 @@ void OutputClass::update()
     _sendShiftOut(_sB, 64, _SHIFT_OUT_B_DATA_PIN, _SHIFT_OUT_B_LATCH_PIN, _SHIFT_OUT_B_CLOCK_PIN);
     _sendShiftOut(_sC, 64, _SHIFT_OUT_C_DATA_PIN, _SHIFT_OUT_C_LATCH_PIN, _SHIFT_OUT_C_CLOCK_PIN);
     
+
+    // Update test LED
     if (testLEDState)
         digitalWrite(TEST_LED, HIGH);
     else
@@ -223,7 +352,13 @@ void OutputClass::setTestLED(bool state)
 {
     testLEDState = state;
 }
-
+/*
+void OutputClass::setTestLCD(String top, String bot)
+{
+    _testLCDTopTxt = top;
+    _testLCDBotTxt = bot;
+}
+*/
 // Misc
 
 
@@ -432,7 +567,7 @@ void OutputClass::setStageLED(bool state)
 
 void OutputClass::setAbortLED(bool state)
 {
-    _sB[49] = state;
+    _sB[48] = state;
 }
 
 // Custom Action Groups
