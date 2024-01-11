@@ -1,0 +1,403 @@
+\doxysection{Output.\+cpp File Reference}
+\hypertarget{_output_8cpp}{}\label{_output_8cpp}\index{Output.cpp@{Output.cpp}}
+{\ttfamily \#include "{}Output.\+h"{}}\newline
+{\ttfamily \#include $<$pins\+\_\+arduino.\+h$>$}\newline
+{\ttfamily \#include $<$variant.\+h$>$}\newline
+{\ttfamily \#include $<$Liquid\+Crystal\+\_\+\+I2\+C.\+h$>$}\newline
+\doxysubsubsection*{Functions}
+\begin{DoxyCompactItemize}
+\item 
+Liquid\+Crystal\+\_\+\+I2C \mbox{\hyperlink{_output_8cpp_a7a73477e20209e9646f0616b9af74804}{\+\_\+heading\+LCD}} (0x27, 16, 2)
+\item 
+Liquid\+Crystal\+\_\+\+I2C \mbox{\hyperlink{_output_8cpp_a6331f66107e05adf035d77c1baff4e8c}{\+\_\+speed\+LCD}} (0x26, 16, 2)
+\item 
+Liquid\+Crystal\+\_\+\+I2C \mbox{\hyperlink{_output_8cpp_a275291ff8fae1779928b0865deb0c8fb}{\+\_\+altitude\+LCD}} (0x25, 16, 2)
+\item 
+Liquid\+Crystal\+\_\+\+I2C \mbox{\hyperlink{_output_8cpp_a6683f5961163632b4d218e2e95a27bd4}{\+\_\+info\+LCD}} (0x23, 16, 2)
+\item 
+Liquid\+Crystal\+\_\+\+I2C \mbox{\hyperlink{_output_8cpp_a7e35a0f9bc8610bb5d4867e519471743}{\+\_\+direction\+LCD}} (0x22, 16, 2)
+\item 
+Liquid\+Crystal\+\_\+\+I2C \mbox{\hyperlink{_output_8cpp_aa4edb9f4b4fc486ec9d4dd414474a670}{\+\_\+test\+LCD}} (0x24, 16, 2)
+\item 
+void \mbox{\hyperlink{_output_8cpp_a882a532d2fb24cb6addc28626750ecaf}{\+\_\+send\+Shift\+Out}} (bool states\mbox{[}$\,$\mbox{]}, int size, int data\+Pin, int latch\+Pin, int clock\+Pin)
+\item 
+void \mbox{\hyperlink{_output_8cpp_a03b51fa85bb2069d577de04dd8ef07cc}{\+\_\+send\+LCD}} (Liquid\+Crystal\+\_\+\+I2C lcd, String line1, String line2)
+\begin{DoxyCompactList}\small\item\em Update the I2C LCD displays. \end{DoxyCompactList}\end{DoxyCompactItemize}
+\doxysubsubsection*{Variables}
+\begin{DoxyCompactItemize}
+\item 
+int const \mbox{\hyperlink{_output_8cpp_a6ed0a261b8e892a3262411fa9ca17910}{\+\_\+\+SHIFT\+\_\+\+OUT\+\_\+\+A\+\_\+\+DATA\+\_\+\+PIN}} = 2
+\item 
+int const \mbox{\hyperlink{_output_8cpp_a75d911671079cf9afb0a6eddc634d564}{\+\_\+\+SHIFT\+\_\+\+OUT\+\_\+\+A\+\_\+\+LATCH\+\_\+\+PIN}} = 3
+\item 
+int const \mbox{\hyperlink{_output_8cpp_a7c200a04aa9344b9393f0f0f019fd910}{\+\_\+\+SHIFT\+\_\+\+OUT\+\_\+\+A\+\_\+\+CLOCK\+\_\+\+PIN}} = 4
+\item 
+int const \mbox{\hyperlink{_output_8cpp_a82e03d97daa6c3dea74ab72bcc496bef}{\+\_\+\+SHIFT\+\_\+\+OUT\+\_\+\+B\+\_\+\+DATA\+\_\+\+PIN}} = 5
+\item 
+int const \mbox{\hyperlink{_output_8cpp_afd07b606ca8a8d1dacbac3c148afb0f5}{\+\_\+\+SHIFT\+\_\+\+OUT\+\_\+\+B\+\_\+\+LATCH\+\_\+\+PIN}} = 6
+\item 
+int const \mbox{\hyperlink{_output_8cpp_a97e4354f1214a5f92949fcb38384fdfd}{\+\_\+\+SHIFT\+\_\+\+OUT\+\_\+\+B\+\_\+\+CLOCK\+\_\+\+PIN}} = 7
+\item 
+int const \mbox{\hyperlink{_output_8cpp_a842ee4548cdd18d0436db045a7a65d35}{\+\_\+\+SHIFT\+\_\+\+OUT\+\_\+\+C\+\_\+\+DATA\+\_\+\+PIN}} = 8
+\item 
+int const \mbox{\hyperlink{_output_8cpp_aa6701bb95a3d8f707a925d6d5e820d82}{\+\_\+\+SHIFT\+\_\+\+OUT\+\_\+\+C\+\_\+\+LATCH\+\_\+\+PIN}} = 9
+\item 
+int const \mbox{\hyperlink{_output_8cpp_ab42c9b67f6407e548400955b09e07079}{\+\_\+\+SHIFT\+\_\+\+OUT\+\_\+\+C\+\_\+\+CLOCK\+\_\+\+PIN}} = 10
+\item 
+const byte \mbox{\hyperlink{_output_8cpp_a41f1ff9e939561c974ddbfa9d0e1ae6d}{TEST\+\_\+\+LED}} = 53
+\item 
+bool \mbox{\hyperlink{_output_8cpp_aad4badab1b1f891766d056d323d5ddd7}{test\+LEDState}} = false
+\item 
+bool \mbox{\hyperlink{_output_8cpp_a7db8d76801ae75cfbaa01825aefbdea0}{\+\_\+sA}} \mbox{[}64\mbox{]} = \{ 0 \}
+\item 
+bool \mbox{\hyperlink{_output_8cpp_a4aaa0f36f6031e777de18a8b36967983}{\+\_\+sB}} \mbox{[}64\mbox{]} = \{ 0 \}
+\item 
+bool \mbox{\hyperlink{_output_8cpp_a1760ffbfb46ab14668c37f0b1ae6b7ec}{\+\_\+sC}} \mbox{[}16\mbox{]} = \{ 0 \}
+\item 
+String \mbox{\hyperlink{_output_8cpp_ae1bb84e044abf9505cbf13b431d06b08}{\+\_\+speed\+LCDTop\+Txt}}
+\item 
+String \mbox{\hyperlink{_output_8cpp_a5dbfc0add79b8eb7ba54c774d2d622c2}{\+\_\+speed\+LCDBot\+Txt}}
+\item 
+String \mbox{\hyperlink{_output_8cpp_a0b659aba48abff36841051c144d0ec81}{\+\_\+altitude\+LCDTop\+Txt}}
+\item 
+String \mbox{\hyperlink{_output_8cpp_a1ba50dcc90c728c245ce6b3d059f0b2d}{\+\_\+altitude\+LCDBot\+Txt}}
+\item 
+String \mbox{\hyperlink{_output_8cpp_a4153725d6bf04a26de9b9d4dafc48f94}{\+\_\+info\+LCDTop\+Txt}}
+\item 
+String \mbox{\hyperlink{_output_8cpp_a97c39318a734a8fddf716463f44314ea}{\+\_\+info\+LCDBot\+Txt}}
+\item 
+String \mbox{\hyperlink{_output_8cpp_a80200c921fcd32fcc376fff0d7a1bfe9}{\+\_\+heading\+LCDTop\+Txt}}
+\item 
+String \mbox{\hyperlink{_output_8cpp_adf2d32bc41f2ad2675c990df7dfacb84}{\+\_\+heading\+LCDBot\+Txt}}
+\item 
+String \mbox{\hyperlink{_output_8cpp_a4aa4d5f149273539951e7054ed807394}{\+\_\+direction\+LCDTop\+Txt}}
+\item 
+String \mbox{\hyperlink{_output_8cpp_af7ab7ef464479367ddbae3af2126f6d3}{\+\_\+direction\+LCDBot\+Txt}}
+\item 
+\mbox{\hyperlink{class_output_class}{Output\+Class}} \mbox{\hyperlink{_output_8cpp_a334e66def33fded52932216ef30246ca}{Output}}
+\end{DoxyCompactItemize}
+
+
+\doxysubsection{Function Documentation}
+\Hypertarget{_output_8cpp_a275291ff8fae1779928b0865deb0c8fb}\label{_output_8cpp_a275291ff8fae1779928b0865deb0c8fb} 
+\index{Output.cpp@{Output.cpp}!\_altitudeLCD@{\_altitudeLCD}}
+\index{\_altitudeLCD@{\_altitudeLCD}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_altitudeLCD()}{\_altitudeLCD()}}
+{\footnotesize\ttfamily Liquid\+Crystal\+\_\+\+I2C \+\_\+altitude\+LCD (\begin{DoxyParamCaption}\item[{0x25}]{,  }\item[{16}]{,  }\item[{2}]{ }\end{DoxyParamCaption})}
+
+\Hypertarget{_output_8cpp_a7e35a0f9bc8610bb5d4867e519471743}\label{_output_8cpp_a7e35a0f9bc8610bb5d4867e519471743} 
+\index{Output.cpp@{Output.cpp}!\_directionLCD@{\_directionLCD}}
+\index{\_directionLCD@{\_directionLCD}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_directionLCD()}{\_directionLCD()}}
+{\footnotesize\ttfamily Liquid\+Crystal\+\_\+\+I2C \+\_\+direction\+LCD (\begin{DoxyParamCaption}\item[{0x22}]{,  }\item[{16}]{,  }\item[{2}]{ }\end{DoxyParamCaption})}
+
+\Hypertarget{_output_8cpp_a7a73477e20209e9646f0616b9af74804}\label{_output_8cpp_a7a73477e20209e9646f0616b9af74804} 
+\index{Output.cpp@{Output.cpp}!\_headingLCD@{\_headingLCD}}
+\index{\_headingLCD@{\_headingLCD}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_headingLCD()}{\_headingLCD()}}
+{\footnotesize\ttfamily Liquid\+Crystal\+\_\+\+I2C \+\_\+heading\+LCD (\begin{DoxyParamCaption}\item[{0x27}]{,  }\item[{16}]{,  }\item[{2}]{ }\end{DoxyParamCaption})}
+
+\Hypertarget{_output_8cpp_a6683f5961163632b4d218e2e95a27bd4}\label{_output_8cpp_a6683f5961163632b4d218e2e95a27bd4} 
+\index{Output.cpp@{Output.cpp}!\_infoLCD@{\_infoLCD}}
+\index{\_infoLCD@{\_infoLCD}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_infoLCD()}{\_infoLCD()}}
+{\footnotesize\ttfamily Liquid\+Crystal\+\_\+\+I2C \+\_\+info\+LCD (\begin{DoxyParamCaption}\item[{0x23}]{,  }\item[{16}]{,  }\item[{2}]{ }\end{DoxyParamCaption})}
+
+\Hypertarget{_output_8cpp_a03b51fa85bb2069d577de04dd8ef07cc}\label{_output_8cpp_a03b51fa85bb2069d577de04dd8ef07cc} 
+\index{Output.cpp@{Output.cpp}!\_sendLCD@{\_sendLCD}}
+\index{\_sendLCD@{\_sendLCD}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_sendLCD()}{\_sendLCD()}}
+{\footnotesize\ttfamily void \+\_\+send\+LCD (\begin{DoxyParamCaption}\item[{Liquid\+Crystal\+\_\+\+I2C}]{lcd,  }\item[{String}]{line1,  }\item[{String}]{line2 }\end{DoxyParamCaption})}
+
+
+
+Update the I2C LCD displays. 
+
+
+\begin{DoxyParams}{Parameters}
+{\em lcd} & LCD to update.\\
+\hline
+{\em top\+Txt} & String for line 1 on the LCD.\\
+\hline
+{\em bot\+Txt} & String for line 2 on the LCD.\\
+\hline
+\end{DoxyParams}
+
+
+Definition at line \mbox{\hyperlink{_output_8cpp_source_l00250}{250}} of file \mbox{\hyperlink{_output_8cpp_source}{Output.\+cpp}}.
+
+\Hypertarget{_output_8cpp_a882a532d2fb24cb6addc28626750ecaf}\label{_output_8cpp_a882a532d2fb24cb6addc28626750ecaf} 
+\index{Output.cpp@{Output.cpp}!\_sendShiftOut@{\_sendShiftOut}}
+\index{\_sendShiftOut@{\_sendShiftOut}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_sendShiftOut()}{\_sendShiftOut()}}
+{\footnotesize\ttfamily void \+\_\+send\+Shift\+Out (\begin{DoxyParamCaption}\item[{bool}]{states\mbox{[}$\,$\mbox{]},  }\item[{int}]{size,  }\item[{int}]{data\+Pin,  }\item[{int}]{latch\+Pin,  }\item[{int}]{clock\+Pin }\end{DoxyParamCaption})}
+
+
+
+Definition at line \mbox{\hyperlink{_output_8cpp_source_l00189}{189}} of file \mbox{\hyperlink{_output_8cpp_source}{Output.\+cpp}}.
+
+\Hypertarget{_output_8cpp_a6331f66107e05adf035d77c1baff4e8c}\label{_output_8cpp_a6331f66107e05adf035d77c1baff4e8c} 
+\index{Output.cpp@{Output.cpp}!\_speedLCD@{\_speedLCD}}
+\index{\_speedLCD@{\_speedLCD}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_speedLCD()}{\_speedLCD()}}
+{\footnotesize\ttfamily Liquid\+Crystal\+\_\+\+I2C \+\_\+speed\+LCD (\begin{DoxyParamCaption}\item[{0x26}]{,  }\item[{16}]{,  }\item[{2}]{ }\end{DoxyParamCaption})}
+
+\Hypertarget{_output_8cpp_aa4edb9f4b4fc486ec9d4dd414474a670}\label{_output_8cpp_aa4edb9f4b4fc486ec9d4dd414474a670} 
+\index{Output.cpp@{Output.cpp}!\_testLCD@{\_testLCD}}
+\index{\_testLCD@{\_testLCD}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_testLCD()}{\_testLCD()}}
+{\footnotesize\ttfamily Liquid\+Crystal\+\_\+\+I2C \+\_\+test\+LCD (\begin{DoxyParamCaption}\item[{0x24}]{,  }\item[{16}]{,  }\item[{2}]{ }\end{DoxyParamCaption})}
+
+
+
+\doxysubsection{Variable Documentation}
+\Hypertarget{_output_8cpp_a1ba50dcc90c728c245ce6b3d059f0b2d}\label{_output_8cpp_a1ba50dcc90c728c245ce6b3d059f0b2d} 
+\index{Output.cpp@{Output.cpp}!\_altitudeLCDBotTxt@{\_altitudeLCDBotTxt}}
+\index{\_altitudeLCDBotTxt@{\_altitudeLCDBotTxt}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_altitudeLCDBotTxt}{\_altitudeLCDBotTxt}}
+{\footnotesize\ttfamily String \+\_\+altitude\+LCDBot\+Txt}
+
+
+
+Definition at line \mbox{\hyperlink{_output_8cpp_source_l00175}{175}} of file \mbox{\hyperlink{_output_8cpp_source}{Output.\+cpp}}.
+
+\Hypertarget{_output_8cpp_a0b659aba48abff36841051c144d0ec81}\label{_output_8cpp_a0b659aba48abff36841051c144d0ec81} 
+\index{Output.cpp@{Output.cpp}!\_altitudeLCDTopTxt@{\_altitudeLCDTopTxt}}
+\index{\_altitudeLCDTopTxt@{\_altitudeLCDTopTxt}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_altitudeLCDTopTxt}{\_altitudeLCDTopTxt}}
+{\footnotesize\ttfamily String \+\_\+altitude\+LCDTop\+Txt}
+
+
+
+Definition at line \mbox{\hyperlink{_output_8cpp_source_l00175}{175}} of file \mbox{\hyperlink{_output_8cpp_source}{Output.\+cpp}}.
+
+\Hypertarget{_output_8cpp_af7ab7ef464479367ddbae3af2126f6d3}\label{_output_8cpp_af7ab7ef464479367ddbae3af2126f6d3} 
+\index{Output.cpp@{Output.cpp}!\_directionLCDBotTxt@{\_directionLCDBotTxt}}
+\index{\_directionLCDBotTxt@{\_directionLCDBotTxt}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_directionLCDBotTxt}{\_directionLCDBotTxt}}
+{\footnotesize\ttfamily String \+\_\+direction\+LCDBot\+Txt}
+
+
+
+Definition at line \mbox{\hyperlink{_output_8cpp_source_l00181}{181}} of file \mbox{\hyperlink{_output_8cpp_source}{Output.\+cpp}}.
+
+\Hypertarget{_output_8cpp_a4aa4d5f149273539951e7054ed807394}\label{_output_8cpp_a4aa4d5f149273539951e7054ed807394} 
+\index{Output.cpp@{Output.cpp}!\_directionLCDTopTxt@{\_directionLCDTopTxt}}
+\index{\_directionLCDTopTxt@{\_directionLCDTopTxt}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_directionLCDTopTxt}{\_directionLCDTopTxt}}
+{\footnotesize\ttfamily String \+\_\+direction\+LCDTop\+Txt}
+
+
+
+Definition at line \mbox{\hyperlink{_output_8cpp_source_l00181}{181}} of file \mbox{\hyperlink{_output_8cpp_source}{Output.\+cpp}}.
+
+\Hypertarget{_output_8cpp_adf2d32bc41f2ad2675c990df7dfacb84}\label{_output_8cpp_adf2d32bc41f2ad2675c990df7dfacb84} 
+\index{Output.cpp@{Output.cpp}!\_headingLCDBotTxt@{\_headingLCDBotTxt}}
+\index{\_headingLCDBotTxt@{\_headingLCDBotTxt}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_headingLCDBotTxt}{\_headingLCDBotTxt}}
+{\footnotesize\ttfamily String \+\_\+heading\+LCDBot\+Txt}
+
+
+
+Definition at line \mbox{\hyperlink{_output_8cpp_source_l00179}{179}} of file \mbox{\hyperlink{_output_8cpp_source}{Output.\+cpp}}.
+
+\Hypertarget{_output_8cpp_a80200c921fcd32fcc376fff0d7a1bfe9}\label{_output_8cpp_a80200c921fcd32fcc376fff0d7a1bfe9} 
+\index{Output.cpp@{Output.cpp}!\_headingLCDTopTxt@{\_headingLCDTopTxt}}
+\index{\_headingLCDTopTxt@{\_headingLCDTopTxt}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_headingLCDTopTxt}{\_headingLCDTopTxt}}
+{\footnotesize\ttfamily String \+\_\+heading\+LCDTop\+Txt}
+
+
+
+Definition at line \mbox{\hyperlink{_output_8cpp_source_l00179}{179}} of file \mbox{\hyperlink{_output_8cpp_source}{Output.\+cpp}}.
+
+\Hypertarget{_output_8cpp_a97c39318a734a8fddf716463f44314ea}\label{_output_8cpp_a97c39318a734a8fddf716463f44314ea} 
+\index{Output.cpp@{Output.cpp}!\_infoLCDBotTxt@{\_infoLCDBotTxt}}
+\index{\_infoLCDBotTxt@{\_infoLCDBotTxt}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_infoLCDBotTxt}{\_infoLCDBotTxt}}
+{\footnotesize\ttfamily String \+\_\+info\+LCDBot\+Txt}
+
+
+
+Definition at line \mbox{\hyperlink{_output_8cpp_source_l00177}{177}} of file \mbox{\hyperlink{_output_8cpp_source}{Output.\+cpp}}.
+
+\Hypertarget{_output_8cpp_a4153725d6bf04a26de9b9d4dafc48f94}\label{_output_8cpp_a4153725d6bf04a26de9b9d4dafc48f94} 
+\index{Output.cpp@{Output.cpp}!\_infoLCDTopTxt@{\_infoLCDTopTxt}}
+\index{\_infoLCDTopTxt@{\_infoLCDTopTxt}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_infoLCDTopTxt}{\_infoLCDTopTxt}}
+{\footnotesize\ttfamily String \+\_\+info\+LCDTop\+Txt}
+
+
+
+Definition at line \mbox{\hyperlink{_output_8cpp_source_l00177}{177}} of file \mbox{\hyperlink{_output_8cpp_source}{Output.\+cpp}}.
+
+\Hypertarget{_output_8cpp_a7db8d76801ae75cfbaa01825aefbdea0}\label{_output_8cpp_a7db8d76801ae75cfbaa01825aefbdea0} 
+\index{Output.cpp@{Output.cpp}!\_sA@{\_sA}}
+\index{\_sA@{\_sA}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_sA}{\_sA}}
+{\footnotesize\ttfamily bool \+\_\+sA\mbox{[}64\mbox{]} = \{ 0 \}}
+
+
+
+Definition at line \mbox{\hyperlink{_output_8cpp_source_l00151}{151}} of file \mbox{\hyperlink{_output_8cpp_source}{Output.\+cpp}}.
+
+\Hypertarget{_output_8cpp_a4aaa0f36f6031e777de18a8b36967983}\label{_output_8cpp_a4aaa0f36f6031e777de18a8b36967983} 
+\index{Output.cpp@{Output.cpp}!\_sB@{\_sB}}
+\index{\_sB@{\_sB}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_sB}{\_sB}}
+{\footnotesize\ttfamily bool \+\_\+sB\mbox{[}64\mbox{]} = \{ 0 \}}
+
+
+
+Definition at line \mbox{\hyperlink{_output_8cpp_source_l00152}{152}} of file \mbox{\hyperlink{_output_8cpp_source}{Output.\+cpp}}.
+
+\Hypertarget{_output_8cpp_a1760ffbfb46ab14668c37f0b1ae6b7ec}\label{_output_8cpp_a1760ffbfb46ab14668c37f0b1ae6b7ec} 
+\index{Output.cpp@{Output.cpp}!\_sC@{\_sC}}
+\index{\_sC@{\_sC}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_sC}{\_sC}}
+{\footnotesize\ttfamily bool \+\_\+sC\mbox{[}16\mbox{]} = \{ 0 \}}
+
+
+
+Definition at line \mbox{\hyperlink{_output_8cpp_source_l00153}{153}} of file \mbox{\hyperlink{_output_8cpp_source}{Output.\+cpp}}.
+
+\Hypertarget{_output_8cpp_a7c200a04aa9344b9393f0f0f019fd910}\label{_output_8cpp_a7c200a04aa9344b9393f0f0f019fd910} 
+\index{Output.cpp@{Output.cpp}!\_SHIFT\_OUT\_A\_CLOCK\_PIN@{\_SHIFT\_OUT\_A\_CLOCK\_PIN}}
+\index{\_SHIFT\_OUT\_A\_CLOCK\_PIN@{\_SHIFT\_OUT\_A\_CLOCK\_PIN}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_SHIFT\_OUT\_A\_CLOCK\_PIN}{\_SHIFT\_OUT\_A\_CLOCK\_PIN}}
+{\footnotesize\ttfamily int const \+\_\+\+SHIFT\+\_\+\+OUT\+\_\+\+A\+\_\+\+CLOCK\+\_\+\+PIN = 4}
+
+
+
+Definition at line \mbox{\hyperlink{_output_8cpp_source_l00138}{138}} of file \mbox{\hyperlink{_output_8cpp_source}{Output.\+cpp}}.
+
+\Hypertarget{_output_8cpp_a6ed0a261b8e892a3262411fa9ca17910}\label{_output_8cpp_a6ed0a261b8e892a3262411fa9ca17910} 
+\index{Output.cpp@{Output.cpp}!\_SHIFT\_OUT\_A\_DATA\_PIN@{\_SHIFT\_OUT\_A\_DATA\_PIN}}
+\index{\_SHIFT\_OUT\_A\_DATA\_PIN@{\_SHIFT\_OUT\_A\_DATA\_PIN}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_SHIFT\_OUT\_A\_DATA\_PIN}{\_SHIFT\_OUT\_A\_DATA\_PIN}}
+{\footnotesize\ttfamily int const \+\_\+\+SHIFT\+\_\+\+OUT\+\_\+\+A\+\_\+\+DATA\+\_\+\+PIN = 2}
+
+
+
+Definition at line \mbox{\hyperlink{_output_8cpp_source_l00136}{136}} of file \mbox{\hyperlink{_output_8cpp_source}{Output.\+cpp}}.
+
+\Hypertarget{_output_8cpp_a75d911671079cf9afb0a6eddc634d564}\label{_output_8cpp_a75d911671079cf9afb0a6eddc634d564} 
+\index{Output.cpp@{Output.cpp}!\_SHIFT\_OUT\_A\_LATCH\_PIN@{\_SHIFT\_OUT\_A\_LATCH\_PIN}}
+\index{\_SHIFT\_OUT\_A\_LATCH\_PIN@{\_SHIFT\_OUT\_A\_LATCH\_PIN}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_SHIFT\_OUT\_A\_LATCH\_PIN}{\_SHIFT\_OUT\_A\_LATCH\_PIN}}
+{\footnotesize\ttfamily int const \+\_\+\+SHIFT\+\_\+\+OUT\+\_\+\+A\+\_\+\+LATCH\+\_\+\+PIN = 3}
+
+
+
+Definition at line \mbox{\hyperlink{_output_8cpp_source_l00137}{137}} of file \mbox{\hyperlink{_output_8cpp_source}{Output.\+cpp}}.
+
+\Hypertarget{_output_8cpp_a97e4354f1214a5f92949fcb38384fdfd}\label{_output_8cpp_a97e4354f1214a5f92949fcb38384fdfd} 
+\index{Output.cpp@{Output.cpp}!\_SHIFT\_OUT\_B\_CLOCK\_PIN@{\_SHIFT\_OUT\_B\_CLOCK\_PIN}}
+\index{\_SHIFT\_OUT\_B\_CLOCK\_PIN@{\_SHIFT\_OUT\_B\_CLOCK\_PIN}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_SHIFT\_OUT\_B\_CLOCK\_PIN}{\_SHIFT\_OUT\_B\_CLOCK\_PIN}}
+{\footnotesize\ttfamily int const \+\_\+\+SHIFT\+\_\+\+OUT\+\_\+\+B\+\_\+\+CLOCK\+\_\+\+PIN = 7}
+
+
+
+Definition at line \mbox{\hyperlink{_output_8cpp_source_l00141}{141}} of file \mbox{\hyperlink{_output_8cpp_source}{Output.\+cpp}}.
+
+\Hypertarget{_output_8cpp_a82e03d97daa6c3dea74ab72bcc496bef}\label{_output_8cpp_a82e03d97daa6c3dea74ab72bcc496bef} 
+\index{Output.cpp@{Output.cpp}!\_SHIFT\_OUT\_B\_DATA\_PIN@{\_SHIFT\_OUT\_B\_DATA\_PIN}}
+\index{\_SHIFT\_OUT\_B\_DATA\_PIN@{\_SHIFT\_OUT\_B\_DATA\_PIN}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_SHIFT\_OUT\_B\_DATA\_PIN}{\_SHIFT\_OUT\_B\_DATA\_PIN}}
+{\footnotesize\ttfamily int const \+\_\+\+SHIFT\+\_\+\+OUT\+\_\+\+B\+\_\+\+DATA\+\_\+\+PIN = 5}
+
+
+
+Definition at line \mbox{\hyperlink{_output_8cpp_source_l00139}{139}} of file \mbox{\hyperlink{_output_8cpp_source}{Output.\+cpp}}.
+
+\Hypertarget{_output_8cpp_afd07b606ca8a8d1dacbac3c148afb0f5}\label{_output_8cpp_afd07b606ca8a8d1dacbac3c148afb0f5} 
+\index{Output.cpp@{Output.cpp}!\_SHIFT\_OUT\_B\_LATCH\_PIN@{\_SHIFT\_OUT\_B\_LATCH\_PIN}}
+\index{\_SHIFT\_OUT\_B\_LATCH\_PIN@{\_SHIFT\_OUT\_B\_LATCH\_PIN}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_SHIFT\_OUT\_B\_LATCH\_PIN}{\_SHIFT\_OUT\_B\_LATCH\_PIN}}
+{\footnotesize\ttfamily int const \+\_\+\+SHIFT\+\_\+\+OUT\+\_\+\+B\+\_\+\+LATCH\+\_\+\+PIN = 6}
+
+
+
+Definition at line \mbox{\hyperlink{_output_8cpp_source_l00140}{140}} of file \mbox{\hyperlink{_output_8cpp_source}{Output.\+cpp}}.
+
+\Hypertarget{_output_8cpp_ab42c9b67f6407e548400955b09e07079}\label{_output_8cpp_ab42c9b67f6407e548400955b09e07079} 
+\index{Output.cpp@{Output.cpp}!\_SHIFT\_OUT\_C\_CLOCK\_PIN@{\_SHIFT\_OUT\_C\_CLOCK\_PIN}}
+\index{\_SHIFT\_OUT\_C\_CLOCK\_PIN@{\_SHIFT\_OUT\_C\_CLOCK\_PIN}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_SHIFT\_OUT\_C\_CLOCK\_PIN}{\_SHIFT\_OUT\_C\_CLOCK\_PIN}}
+{\footnotesize\ttfamily int const \+\_\+\+SHIFT\+\_\+\+OUT\+\_\+\+C\+\_\+\+CLOCK\+\_\+\+PIN = 10}
+
+
+
+Definition at line \mbox{\hyperlink{_output_8cpp_source_l00144}{144}} of file \mbox{\hyperlink{_output_8cpp_source}{Output.\+cpp}}.
+
+\Hypertarget{_output_8cpp_a842ee4548cdd18d0436db045a7a65d35}\label{_output_8cpp_a842ee4548cdd18d0436db045a7a65d35} 
+\index{Output.cpp@{Output.cpp}!\_SHIFT\_OUT\_C\_DATA\_PIN@{\_SHIFT\_OUT\_C\_DATA\_PIN}}
+\index{\_SHIFT\_OUT\_C\_DATA\_PIN@{\_SHIFT\_OUT\_C\_DATA\_PIN}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_SHIFT\_OUT\_C\_DATA\_PIN}{\_SHIFT\_OUT\_C\_DATA\_PIN}}
+{\footnotesize\ttfamily int const \+\_\+\+SHIFT\+\_\+\+OUT\+\_\+\+C\+\_\+\+DATA\+\_\+\+PIN = 8}
+
+
+
+Definition at line \mbox{\hyperlink{_output_8cpp_source_l00142}{142}} of file \mbox{\hyperlink{_output_8cpp_source}{Output.\+cpp}}.
+
+\Hypertarget{_output_8cpp_aa6701bb95a3d8f707a925d6d5e820d82}\label{_output_8cpp_aa6701bb95a3d8f707a925d6d5e820d82} 
+\index{Output.cpp@{Output.cpp}!\_SHIFT\_OUT\_C\_LATCH\_PIN@{\_SHIFT\_OUT\_C\_LATCH\_PIN}}
+\index{\_SHIFT\_OUT\_C\_LATCH\_PIN@{\_SHIFT\_OUT\_C\_LATCH\_PIN}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_SHIFT\_OUT\_C\_LATCH\_PIN}{\_SHIFT\_OUT\_C\_LATCH\_PIN}}
+{\footnotesize\ttfamily int const \+\_\+\+SHIFT\+\_\+\+OUT\+\_\+\+C\+\_\+\+LATCH\+\_\+\+PIN = 9}
+
+
+
+Definition at line \mbox{\hyperlink{_output_8cpp_source_l00143}{143}} of file \mbox{\hyperlink{_output_8cpp_source}{Output.\+cpp}}.
+
+\Hypertarget{_output_8cpp_a5dbfc0add79b8eb7ba54c774d2d622c2}\label{_output_8cpp_a5dbfc0add79b8eb7ba54c774d2d622c2} 
+\index{Output.cpp@{Output.cpp}!\_speedLCDBotTxt@{\_speedLCDBotTxt}}
+\index{\_speedLCDBotTxt@{\_speedLCDBotTxt}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_speedLCDBotTxt}{\_speedLCDBotTxt}}
+{\footnotesize\ttfamily String \+\_\+speed\+LCDBot\+Txt}
+
+
+
+Definition at line \mbox{\hyperlink{_output_8cpp_source_l00173}{173}} of file \mbox{\hyperlink{_output_8cpp_source}{Output.\+cpp}}.
+
+\Hypertarget{_output_8cpp_ae1bb84e044abf9505cbf13b431d06b08}\label{_output_8cpp_ae1bb84e044abf9505cbf13b431d06b08} 
+\index{Output.cpp@{Output.cpp}!\_speedLCDTopTxt@{\_speedLCDTopTxt}}
+\index{\_speedLCDTopTxt@{\_speedLCDTopTxt}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{\_speedLCDTopTxt}{\_speedLCDTopTxt}}
+{\footnotesize\ttfamily String \+\_\+speed\+LCDTop\+Txt}
+
+
+
+Definition at line \mbox{\hyperlink{_output_8cpp_source_l00173}{173}} of file \mbox{\hyperlink{_output_8cpp_source}{Output.\+cpp}}.
+
+\Hypertarget{_output_8cpp_a334e66def33fded52932216ef30246ca}\label{_output_8cpp_a334e66def33fded52932216ef30246ca} 
+\index{Output.cpp@{Output.cpp}!Output@{Output}}
+\index{Output@{Output}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{Output}{Output}}
+{\footnotesize\ttfamily \mbox{\hyperlink{class_output_class}{Output\+Class}} Output}
+
+
+
+Definition at line \mbox{\hyperlink{_output_8cpp_source_l00661}{661}} of file \mbox{\hyperlink{_output_8cpp_source}{Output.\+cpp}}.
+
+\Hypertarget{_output_8cpp_a41f1ff9e939561c974ddbfa9d0e1ae6d}\label{_output_8cpp_a41f1ff9e939561c974ddbfa9d0e1ae6d} 
+\index{Output.cpp@{Output.cpp}!TEST\_LED@{TEST\_LED}}
+\index{TEST\_LED@{TEST\_LED}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{TEST\_LED}{TEST\_LED}}
+{\footnotesize\ttfamily const byte TEST\+\_\+\+LED = 53}
+
+
+
+Definition at line \mbox{\hyperlink{_output_8cpp_source_l00146}{146}} of file \mbox{\hyperlink{_output_8cpp_source}{Output.\+cpp}}.
+
+\Hypertarget{_output_8cpp_aad4badab1b1f891766d056d323d5ddd7}\label{_output_8cpp_aad4badab1b1f891766d056d323d5ddd7} 
+\index{Output.cpp@{Output.cpp}!testLEDState@{testLEDState}}
+\index{testLEDState@{testLEDState}!Output.cpp@{Output.cpp}}
+\doxysubsubsection{\texorpdfstring{testLEDState}{testLEDState}}
+{\footnotesize\ttfamily bool test\+LEDState = false}
+
+
+
+Definition at line \mbox{\hyperlink{_output_8cpp_source_l00148}{148}} of file \mbox{\hyperlink{_output_8cpp_source}{Output.\+cpp}}.
+

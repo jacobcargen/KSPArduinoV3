@@ -14,6 +14,35 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
+class Timer
+{
+private:
+
+    unsigned long previousMillis = 0;
+    unsigned long delayMillis = 0;
+
+
+public:
+
+    void start(unsigned long delayMillis)
+    {
+        this->delayMillis = delayMillis;
+        previousMillis = millis();
+    }
+    // Check 
+    bool check() // Check time and reset if ready
+    {
+        unsigned long currentMillis = millis();
+        if (currentMillis >= delayMillis + previousMillis)
+        {
+            previousMillis = currentMillis;
+            return true;
+        }
+        return false;
+    }
+
+};
+
 struct actionGroups
 {
 public:
@@ -45,6 +74,13 @@ enum infoModes
     K = 11,
     L = 12,
     
+};
+enum speedMode
+{
+    SPEED_SURFACE_MODE,
+    SPEED_ORBIT_MODE,
+    SPEED_TARGET_MODE,
+    SPEED_VERTICAL_MODE
 };
 
 #pragma region Ksp Simpit
@@ -120,6 +156,7 @@ const float JOYSTICK_SMOOTHING_FACTOR = 0.2;  // Adjust this value for more or l
 /////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////
 
+speedMode currentSpeedMode;
 bool translationHold = false;
 bool rotationHold = false;
 
@@ -128,6 +165,8 @@ int previousMillis;
 
 bool isDebugMode = true;
 
+Timer timer;
+int loopCount = 0;
 
 
 /////////////////////////////////////////////////////////////////
@@ -136,19 +175,13 @@ bool isDebugMode = true;
 
 void setup()
 {
+    loopCount = 0;
+    timer.start(2000);
+
     // Open up the serial port
     Serial.begin(115200);
     // Init I/O
     initIO();
-
-    //Output.setTestLCD("TEST1 Test1", "TEST2 test2");
-    String x = "ABCDEFGHIJKLMNOP";
-    Output.setSpeedLCD(x, x);
-    Output.setAltitudeLCD(x, x);
-    Output.setHeadingLCD(x, x);
-    Output.setDirectionLCD(x, x);
-    Output.setInfoLCD(x, x);
-    Output.update();
 
     //while (true)
     //    preKSPConnectionLoop();
@@ -169,26 +202,36 @@ void setup()
 }
 void loop() 
 {
-    
+    loopCount++;
     // If vessel  change, 
     //if (vesselSwitched)
         //waitForInputEnable();
 
     // Update input from controller (Refresh inputs)
-    Input.update();
-
+    //int inputStart = millis();
+    //Input.update();
+    //int inputDelay = millis() - inputStart;
     ////// Set things //////
+    setSpeedLCD();
+        //printHz("Loop Time");
 
-
+    uint32_t outputStart = millis();
     // Update output to controller (Refresh controller)
     Output.update();
-    
+    uint32_t outputDelay = millis() - outputStart;
+
+    uint32_t simpitStart = millis();
     // Update simpit
     mySimpit.update();
-    printHz("");
+    uint32_t simpitDelay = millis() - simpitStart;
 
-    if (isDebugMode)
-        printHz("Loop Time");
+    if (timer.check())
+    {
+        mySimpit.printToKSP("Loop: " + String(loopCount) + " | OUTPUT: " + String(outputDelay) + "ms", PRINT_TO_SCREEN);
+        mySimpit.printToKSP("Loop: " + String(loopCount) + " | SIMPIT: " + String(simpitDelay) + "ms", PRINT_TO_SCREEN);
+    }
+
+
 }
 
 
@@ -238,7 +281,6 @@ void testOutput()
     }
     Output.overrideSet(x);
     Output.update();
-    delay(500);
 }
 void preKSPConnectionLoop()
 {
@@ -276,8 +318,10 @@ void preKSPConnectionLoop()
 }
 void initSimpit()
 {
+    Output.setSpeedLCD("Waiting for KSP", "");
+    Output.update();
     // Wait for a connection to ksp
-    while (!mySimpit.init());
+    while (!mySimpit.init()) delay(100);
     // Show that the controller has connected
     mySimpit.printToKSP("KSP Controller Connected!", PRINT_TO_SCREEN);
     // Register a method for receiving simpit message from ksp
@@ -286,11 +330,6 @@ void initSimpit()
     registerSimpitChannels();
 }
 
-
-void print(String x) 
-{ 
-    Serial.println("\t" + x);
-}
 void printHz(String customTxt)
 {
     // Measure the current time
@@ -301,11 +340,7 @@ void printHz(String customTxt)
 
     // Print the loop rate (inverse of the elapsed time)
     float loopRate = 1000.0 / elapsedTime;  // Convert to loops per second (Hz)
-    Serial.print(String(customTxt));
-    Serial.print(String(loopRate));
-    Serial.println(" Hz");
-
-    //mySimpit.printToKSP(String(customTxt) + ": " + String(loopRate) + " Hz", PRINT_TO_SCREEN);
+    mySimpit.printToKSP(String(customTxt) + ": " + String(loopRate) + " Hz", PRINT_TO_SCREEN);
     // Update the previous timestamp for the next iteration
     previousMillis = currentMillis;
 }
@@ -646,7 +681,7 @@ void registerSimpitChannels()
     //mySimpit.registerChannel(CUSTOM_RESOURCE_1_MESSAGE);
     //// Flight Data
     //mySimpit.registerChannel(ALTITUDE_MESSAGE);
-    //mySimpit.registerChannel(VELOCITY_MESSAGE);
+    mySimpit.registerChannel(VELOCITY_MESSAGE);
     //mySimpit.registerChannel(AIRSPEED_MESSAGE);
     //mySimpit.registerChannel(APSIDES_MESSAGE);
     //mySimpit.registerChannel(APSIDESTIME_MESSAGE);
@@ -660,7 +695,7 @@ void registerSimpitChannels()
     //mySimpit.registerChannel(BURNTIME_MESSAGE);
     mySimpit.registerChannel(CAGSTATUS_MESSAGE);
     //mySimpit.registerChannel(TEMP_LIMIT_MESSAGE);
-    //mySimpit.registerChannel(TARGETINFO_MESSAGE);
+    mySimpit.registerChannel(TARGETINFO_MESSAGE);
     //mySimpit.registerChannel(SOI_MESSAGE);
     //mySimpit.registerChannel(SCENE_CHANGE_MESSAGE);
     mySimpit.registerChannel(FLIGHT_STATUS_MESSAGE);
@@ -1045,7 +1080,6 @@ void setPitchWarning()
 // Display
 void setSpeedLCD()
 {
-    /*
     // Speed
     int speed;
     // Clear the strings
@@ -1081,7 +1115,6 @@ void setSpeedLCD()
     botTxt += "m/s";
 
     Output.setSpeedLCD(topTxt, botTxt);
-    */
 }
 void setAltitufeLCD()
 {
@@ -1895,9 +1928,9 @@ String formatNumber(int number, byte lengthReq, bool canBeNegative, bool flipNeg
         {
             if (i == 0 && isNegative) str += "-";
             else if (i == 0 && !isNegative) str += "+";
-            else str += "0";
+            else str += " ";
         }
-        else str += "0";
+        else str += " ";
     }
 
     return str + (String)num;

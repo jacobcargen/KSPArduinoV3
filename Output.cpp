@@ -257,6 +257,7 @@ void _sendLCD(LiquidCrystal_I2C lcd, String line1, String line2)
     // Print to bottom line
     lcd.setCursor(0, 1);
     lcd.print(line2);
+    
 }
 
 #pragma endregion
@@ -282,7 +283,6 @@ void OutputClass::overrideSet(bool x[144])
 /// <summary>Initialize the ouotputs for use.</summary>
 void OutputClass::init()
 {
-
     bool x[144];
     for (int i = 0; i < 144; i++)
     {
@@ -295,14 +295,13 @@ void OutputClass::init()
     _altitudeLCD.begin();
     _infoLCD.begin();
     _directionLCD.begin();
-    //_testLCD.begin();
 
-    _speedLCD.print("SPEED TEST");
-    _headingLCD.print("HEADING TEST");
-    _altitudeLCD.print("ALTITUDE TEST");
-    _infoLCD.print("INFO TEST");
-    _directionLCD.print("DIRECTION TEST");
-    //_testLCD.print("TEST TEST");
+    setSpeedLCD("SPEED TEST", "SPEED TEST");
+    setAltitudeLCD("ALTITUDE TEST", "ALTITUDE TEST");
+    setHeadingLCD("HEADING TEST", "HEADING TEST");
+    setDirectionLCD("DIRECTION TEST", "DIRECTION TEST");
+    setInfoLCD("INFO TEST", "INFO TEST");
+
 
     // Shift register pins
     pinMode(_SHIFT_OUT_A_DATA_PIN, OUTPUT);
@@ -326,26 +325,29 @@ void OutputClass::init()
 /// <summary>Update the controller outputs.</summary>
 void OutputClass::update()
 {
+    
     _sendLCD(_speedLCD, _speedLCDTopTxt, _speedLCDBotTxt);
     _sendLCD(_altitudeLCD, _altitudeLCDTopTxt, _altitudeLCDBotTxt);
     _sendLCD(_headingLCD, _headingLCDTopTxt, _headingLCDBotTxt);
     _sendLCD(_infoLCD, _infoLCDTopTxt, _infoLCDBotTxt);
     _sendLCD(_directionLCD, _directionLCDTopTxt, _directionLCDBotTxt);
+    
     // Update test LCD
     //_sendLCD(_testLCD, _testLCDTopTxt, _testLCDBotTxt);
 
     //_shiftOutB[48] = false;
-
+    
     _sendShiftOut(_sA, 64, _SHIFT_OUT_A_DATA_PIN, _SHIFT_OUT_A_LATCH_PIN, _SHIFT_OUT_A_CLOCK_PIN);
     _sendShiftOut(_sB, 64, _SHIFT_OUT_B_DATA_PIN, _SHIFT_OUT_B_LATCH_PIN, _SHIFT_OUT_B_CLOCK_PIN);
     _sendShiftOut(_sC, 64, _SHIFT_OUT_C_DATA_PIN, _SHIFT_OUT_C_LATCH_PIN, _SHIFT_OUT_C_CLOCK_PIN);
     
-
+       
     // Update test LED
     if (testLEDState)
         digitalWrite(TEST_LED, HIGH);
     else
         digitalWrite(TEST_LED, LOW);
+        
 }
 
 void OutputClass::setTestLED(bool state)

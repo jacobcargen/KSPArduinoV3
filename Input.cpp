@@ -107,7 +107,6 @@ ButtonState getVirtualPin(int virtualPin, bool waitForChange)
     if (((inputReading != pins[virtualPin].lastState) && 
          (millis() - pins[virtualPin].lastDebounceTime > pins[virtualPin].debounceDelay)))
     {
-        // Serial.println("Changing last state");
         pins[virtualPin].lastState = inputReading;
         pins[virtualPin].lastDebounceTime = millis();
         return !pins[virtualPin].lastState ? ON : OFF;
