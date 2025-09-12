@@ -1,3 +1,6 @@
+- Need to have a pre-ksp debug mode
+
+ 
 ------------------------ INPUT ------------------------
 Name					: WIP | Test | Done
 

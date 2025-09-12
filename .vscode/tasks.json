@@ -1,0 +1,39 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Verify",
+            "type": "shell",
+            "command": "arduino-cli compile -b arduino:sam:arduino_due_x_dbg --warnings all",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Upload",
+            "type": "shell",
+            "command": "arduino-cli upload --fqbn arduino:sam:arduino_due_x_dbg -p /dev/ttyACM0",
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Verify and Upload",
+            "dependsOrder": "sequence",
+            "dependsOn": ["Verify", "Upload"],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            }
+        }
+    ]
+}

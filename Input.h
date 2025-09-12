@@ -18,19 +18,19 @@ enum ButtonState
 };
 
 #if defined(ARDUINO) && ARDUINO >= 100
-	#include "arduino.h"
+    #include "Arduino.h"
 #else
-	#include "WProgram.h"
+    #include "WProgram.h"
 #endif
+
 
 class InputClass
 {
- protected:
-
-
- public:
-
-	 void init();
+private:
+    Stream* debugSerial = nullptr;  // Add this member variable
+    
+public:
+	 void init(Stream& serial);     // Modified init signature
 	 void update();
      void setAllVPinsReady();
 
@@ -145,6 +145,9 @@ class InputClass
      byte getRotHoldButton(bool waitForChange = true);
      byte getRotResetButton(bool waitForChange = true);
 
+     // Debugging
+     void debugInputState(int virtualPinNumber);  // No Serial parameter needed
+     void debugSASWarningButton();
 
 	 ~InputClass();  // Destructor declaration
 };

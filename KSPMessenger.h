@@ -11,7 +11,7 @@
 #define _KSPMESSENGER_h
 
 #if defined(ARDUINO) && ARDUINO >= 100
-	#include "arduino.h"
+	#include "Arduino.h"
 	#include <PayloadStructs.h>
 	#include <KerbalSimpitMessageTypes.h>
 	#include <KerbalSimpit.h>

@@ -10,12 +10,15 @@
 #include <pins_arduino.h> 
 #include <variant.h>
 
+
+
 #pragma region Private 
 
 struct VirtualPin
 {
     bool* value;
     bool lastState;
+    bool lastReadingState; // ADDED: Tracks the raw reading to correctly detect changes
     unsigned long lastDebounceTime;
     unsigned long debounceDelay;
 };
@@ -63,70 +66,115 @@ bool _sIA[64];
 bool _sIB[16];
 
 // Holds all of the virtual pins
-VirtualPin* pins;
+VirtualPin* pins = nullptr;
 // Size of pins array (dynamically set)
 int numPins = 0;
 
+Stream* debugSerial = nullptr;
 
 /// <summary>Add a new virtual pin. This can be checked using getVirtualPin().</summary>
 /// <param name="referenceToBoolVal">Boolean varaible that holds the real state of the input.</param>
 /// <param name="virtualPin">What index to create this virtual pin at.</param>
 /// <param name="debounce">Debounce for this virtual pin.</param>
-void AddInput(bool& referenceToBoolVal, int virtualPin, int debounce = 150)
+void AddInput(bool& referenceToBoolVal, int virtualPin, int debounce = 100)
 {
-    // Increase the size of the array if necessary
-    int newSize = max(numPins + 1, virtualPin + 1);
-    VirtualPin* newPins = new VirtualPin[newSize];
-    // Copy existing inputs to the new array
-    for (int i = 0; i < numPins; i++)
-    {
-        newPins[i] = pins[i];
+    // If the new pin is outside the current array bounds, we need to resize.
+    if (virtualPin >= numPins) {
+        int newSize = virtualPin + 1;
+        VirtualPin* newPins = new VirtualPin[newSize];
+
+        // Copy existing inputs to the new array
+        for (int i = 0; i < numPins; i++) {
+            newPins[i] = pins[i];
+        }
+        
+        // Initialize the new elements that are not the one we are adding now
+        for (int i = numPins; i < newSize; i++) {
+            newPins[i].value = nullptr; // Or some other safe default
+            newPins[i].lastState = false;
+            newPins[i].lastReadingState = false;
+            newPins[i].lastDebounceTime = 0;
+            newPins[i].debounceDelay = 100;
+        }
+
+        // Delete the old array
+        delete[] pins;
+        
+        // Update to the new array and size
+        pins = newPins;
+        numPins = newSize;
     }
-    // Add the new input at the specified index
-    newPins[virtualPin].value = &referenceToBoolVal;
-    newPins[virtualPin].lastState = *newPins[virtualPin].value;
-    newPins[virtualPin].lastDebounceTime = 0;
-    newPins[virtualPin].debounceDelay = debounce;
-    // Delete the old array
-    delete[] pins;
-    // Update to the new array
-    pins = newPins;
-    // Update the number of pins
-    numPins = newSize;
+
+    // Now, we can safely add/overwrite the input at the specified index
+    pins[virtualPin].value = &referenceToBoolVal;
+    pins[virtualPin].lastState = *pins[virtualPin].value;
+    pins[virtualPin].lastReadingState = *pins[virtualPin].value;
+    pins[virtualPin].lastDebounceTime = 0;
+    pins[virtualPin].debounceDelay = debounce;
 }
 /// <summary>Read a virtual pin. These are added with AddInput() and stored in pins array.</summary>
 /// <param name="virtualPin"></param>
 /// <returns>This returns the virtual pin state at index, virtual pin.</returns>
 ButtonState getVirtualPin(int virtualPin, bool waitForChange)
 {
-    if (virtualPin > numPins)
+    if (virtualPin < 0 || virtualPin >= numPins || pins[virtualPin].value == nullptr) {
+        if (debugSerial) {
+            debugSerial->println("Error: Virtual pin " + String(virtualPin) + " is out of range or not initialized.");
+        }
         return NOT_READY;
-
-    bool inputReading = *pins[virtualPin].value;
-
-    if (((inputReading != pins[virtualPin].lastState) && 
-         (millis() - pins[virtualPin].lastDebounceTime > pins[virtualPin].debounceDelay)))
-    {
-        pins[virtualPin].lastState = inputReading;
-        pins[virtualPin].lastDebounceTime = millis();
-        return !pins[virtualPin].lastState ? ON : OFF;
     }
-    if (!waitForChange)
-    {
-        return !pins[virtualPin].lastState ? ON : OFF;
+
+    bool currentReading = *pins[virtualPin].value;
+    unsigned long currentTime = millis();
+
+    // Detect if the raw input has changed since the last loop
+    if (currentReading != pins[virtualPin].lastReadingState) {
+        // If it changed, reset the debounce timer
+        pins[virtualPin].lastDebounceTime = currentTime;
     }
-    return NOT_READY;
+
+    // Update the last raw reading for the next loop
+    pins[virtualPin].lastReadingState = currentReading;
+
+    // After the debounce delay has passed...
+    if ((currentTime - pins[virtualPin].lastDebounceTime) > pins[virtualPin].debounceDelay) {
+        // ...the reading is now stable. If the stable state needs updating, do it.
+        if (pins[virtualPin].lastState != currentReading) {
+            pins[virtualPin].lastState = currentReading;
+
+            // If in waitForChange mode, return the new state now
+            if (waitForChange) {
+                return pins[virtualPin].lastState ? ON : OFF;
+            }
+        }
+    }
+
+    // For waitForChange mode, if we're here, it means no debounced change happened
+    if (waitForChange) {
+        return NOT_READY;
+    }
+
+    // For normal mode, always return the last known stable state
+    return pins[virtualPin].lastState ? ON : OFF;
 }
 /// <summary>Initialize all of the virtual pins.</summary>
 void initVirtualPins()
 {
+    // Calculate total number of pins and allocate memory once
+    const int totalPins = 84;
+    if (pins != nullptr) {
+        delete[] pins;
+    }
+    pins = new VirtualPin[totalPins];
+    numPins = totalPins;
+
     for (int i = 0; i < 64; i++)
     {
-        AddInput(_sIA[i], i, 50);
+        AddInput(_sIA[i], i, 10);
     }
     for (int i = 0; i < 16; i++)
     {
-        AddInput(_sIA[i], i + 64, 50);
+        AddInput(_sIB[i], i + 64, 25);
     }
     AddInput(testButton, 80, 50);
     AddInput(testSwitch, 81, 50);
@@ -137,6 +185,15 @@ void initVirtualPins()
 void _shiftIn(int dataA, int clockEnableA, int clockA, int loadA,
               int dataB, int clockEnableB, int clockB, int loadB)
 {
+    // Clear values first
+    for (size_t i = 0; i < 64; i++) {
+        _sIA[i] = 0;
+    }
+    for (size_t i = 0; i < 16; i++) {
+        _sIB[i] = 0;
+    }
+    // Then read and set values
+
     // Pulse to A
     digitalWrite(loadA, LOW);
     delayMicroseconds(5);
@@ -146,42 +203,24 @@ void _shiftIn(int dataA, int clockEnableA, int clockA, int loadA,
     // Get input A data
     digitalWrite(clockA, HIGH);
     digitalWrite(clockEnableA, LOW);
-    inputA[0] = shiftIn(dataA, clockA, MSBFIRST);
-    inputA[1] = shiftIn(dataA, clockA, MSBFIRST);
-    inputA[2] = shiftIn(dataA, clockA, MSBFIRST);
-    inputA[3] = shiftIn(dataA, clockA, MSBFIRST);
-    inputA[4] = shiftIn(dataA, clockA, MSBFIRST);
-    inputA[5] = shiftIn(dataA, clockA, MSBFIRST);
-    inputA[6] = shiftIn(dataA, clockA, MSBFIRST);
-    inputA[7] = shiftIn(dataA, clockA, MSBFIRST);
+    inputA[0] = shiftIn(dataA, clockA, LSBFIRST);  // Changed from MSBFIRST
+    inputA[1] = shiftIn(dataA, clockA, LSBFIRST);
+    inputA[2] = shiftIn(dataA, clockA, LSBFIRST);
+    inputA[3] = shiftIn(dataA, clockA, LSBFIRST);
+    inputA[4] = shiftIn(dataA, clockA, LSBFIRST);
+    inputA[5] = shiftIn(dataA, clockA, LSBFIRST);
+    inputA[6] = shiftIn(dataA, clockA, LSBFIRST);
+    inputA[7] = shiftIn(dataA, clockA, LSBFIRST);
     digitalWrite(clockEnableA, HIGH);
 
     for (size_t i = 0; i < 64; i++)
     {
-        if (i < 8)
-            if (1 == bitRead(inputA[0], i))
-                _sIA[i] = 1;
-            else if (i < 16)
-                if (1 == bitRead(inputA[1], i - 8))
-                    _sIA[i] = 1;
-                else if (i < 24)
-                    if (1 == bitRead(inputA[2], i - 16))
-                        _sIA[i] = 1;
-                    else if (i < 32)
-                        if (1 == bitRead(inputA[3], i - 24))
-                            _sIA[i] = 1;
-                        else if (i < 40)
-                            if (1 == bitRead(inputA[4], i - 32))
-                                _sIA[i] = 1;
-                            else if (i < 48)
-                                if (1 == bitRead(inputA[5], i - 40))
-                                    _sIA[i] = 1;
-                                else if (i < 56)
-                                    if (1 == bitRead(inputA[6], i - 48))
-                                        _sIA[i] = 1;
-                                    else
-                                        if (1 == bitRead(inputA[7], i - 56))
-                                            _sIA[i] = 1;
+        byte byteIndex = i / 8;
+        byte bitIndex = 7 - (i % 8);  // Reverse the bit order for MSBFIRST
+        
+        if (byteIndex < 8 && bitRead(inputA[byteIndex], bitIndex)) {
+            _sIA[i] = 1;
+        }
     }
 
     // Pulse to B
@@ -193,18 +232,18 @@ void _shiftIn(int dataA, int clockEnableA, int clockA, int loadA,
     // Get input B data
     digitalWrite(clockB, HIGH);
     digitalWrite(clockEnableB, LOW);
-    inputB[0] = shiftIn(dataB, clockB, MSBFIRST);
-    inputB[1] = shiftIn(dataB, clockB, MSBFIRST);
+    inputB[0] = shiftIn(dataB, clockB, LSBFIRST);
+    inputB[1] = shiftIn(dataB, clockB, LSBFIRST);
     digitalWrite(clockEnableB, HIGH);
 
     for (size_t i = 0; i < 16; i++)
     {
-        if (i < 8)
-            if (1 == bitRead(inputB[0], i))
-                _sIB[i] = 1;
-            else
-                if (1 == bitRead(inputB[1], i - 8))
-                    _sIB[i] = 1;
+        byte byteIndex = i / 8;
+        byte bitIndex = 7 - (i % 8);
+        
+        if (byteIndex < 2 && bitRead(inputB[byteIndex], bitIndex)) {
+            _sIB[i] = 1;
+        }
     }
 }
 
@@ -213,38 +252,31 @@ void _shiftIn(int dataA, int clockEnableA, int clockA, int loadA,
 
 #pragma region Public
 
-void InputClass::init()
+void InputClass::init(Stream& serial)
 {
-    // Set all states to false
-    testButton = false;
-    testSwitch = false;
-    translationButton = false;
-    rotationButton = false;
-    for (int i = 0; i < 64; i++)
-    {
-        _sIA[i] = false;
-        if (i < 16)
-            _sIB[i] = false;
-    }
-    // Init shift register pins
-    pinMode(SHIFT_IN_A_SERIAL_PIN, INPUT);
+    debugSerial = &serial;  // Store Serial reference
+    
+    // Set pin modes
+    pinMode(SHIFT_IN_A_LOAD_PIN, OUTPUT);
     pinMode(SHIFT_IN_A_CLOCK_PIN, OUTPUT);
     pinMode(SHIFT_IN_A_CLOCK_ENABLE_PIN, OUTPUT);
-    pinMode(SHIFT_IN_A_LOAD_PIN, OUTPUT);
-    pinMode(SHIFT_IN_B_SERIAL_PIN, INPUT);
-    pinMode(SHIFT_IN_B_CLOCK_PIN, OUTPUT);
-    pinMode(SHIFT_IN_B_CLOCK_ENABLE_PIN, OUTPUT);
-    pinMode(SHIFT_IN_B_LOAD_PIN, OUTPUT);
-    // Init test Inputs
-    pinMode(TEST_SWITCH, INPUT_PULLUP);
-    pinMode(TEST_BUTTON, INPUT_PULLUP);
-    // Init virtual pins
+    pinMode(SHIFT_IN_A_SERIAL_PIN, INPUT);
+    
+    // Set initial states
+    digitalWrite(SHIFT_IN_A_LOAD_PIN, HIGH);
+    digitalWrite(SHIFT_IN_A_CLOCK_PIN, LOW);
+    digitalWrite(SHIFT_IN_A_CLOCK_ENABLE_PIN, HIGH);
+    
+    // Initialize virtual pins
     initVirtualPins();
+    
+    debugSerial->println("Input system initialized");
 }
+
 void InputClass::update()
 {
-    //_shiftIn(SHIFT_IN_A_SERIAL_PIN, SHIFT_IN_A_CLOCK_ENABLE_PIN, SHIFT_IN_A_CLOCK_PIN, SHIFT_IN_A_LOAD_PIN,
-            //SHIFT_IN_B_SERIAL_PIN, SHIFT_IN_B_CLOCK_ENABLE_PIN, SHIFT_IN_B_CLOCK_PIN, SHIFT_IN_B_LOAD_PIN);
+    _shiftIn(SHIFT_IN_A_SERIAL_PIN, SHIFT_IN_A_CLOCK_ENABLE_PIN, SHIFT_IN_A_CLOCK_PIN, SHIFT_IN_A_LOAD_PIN,
+            SHIFT_IN_B_SERIAL_PIN, SHIFT_IN_B_CLOCK_ENABLE_PIN, SHIFT_IN_B_CLOCK_PIN, SHIFT_IN_B_LOAD_PIN);
 
     // Arduino Digital Pin reading
     testButton = digitalRead(TEST_BUTTON);
@@ -260,7 +292,8 @@ void InputClass::setAllVPinsReady()
 {
     for (int i = 0; i < numPins; i++)
     {
-        pins[i].lastState = pins[i].value;
+        pins[i].lastState = *pins[i].value;
+        pins[i].lastDebounceTime = millis();
     }
 }
 
@@ -278,8 +311,8 @@ byte InputClass::getTestSwitch(bool waitForChange)
 // Miscellaneous
 
 byte InputClass::getDebugSwitch(bool waitForChange)               
-{ 
-    return getVirtualPin(0, waitForChange);
+{
+    return getVirtualPin(0, waitForChange);  // Assuming debug switch is pin 0
 }
 byte InputClass::getSoundSwitch(bool waitForChange)               
 { 
@@ -659,6 +692,41 @@ byte InputClass::getRotHoldButton(bool waitForChange)
 byte InputClass::getRotResetButton(bool waitForChange)       
 { 
     return getVirtualPin(67, waitForChange); 
+}
+
+// Debugging
+
+void InputClass::debugInputState(int virtualPinNumber) {
+    if (!debugSerial) return;  // Safety check
+    
+    if (virtualPinNumber >= numPins || virtualPinNumber < 0) {
+        debugSerial->print("Pin ");
+        debugSerial->print(virtualPinNumber);
+        debugSerial->println(": Invalid pin");
+        return;
+    }
+    
+    debugSerial->print("Pin ");
+    debugSerial->print(virtualPinNumber);
+    debugSerial->print(": Raw=");
+    debugSerial->print(*pins[virtualPinNumber].value ? "HIGH" : "LOW");
+    debugSerial->print(", LastState=");
+    debugSerial->print(pins[virtualPinNumber].lastState ? "HIGH" : "LOW");
+    debugSerial->print(", Time since change=");
+    debugSerial->print(millis() - pins[virtualPinNumber].lastDebounceTime);
+    debugSerial->print("ms, Debounce delay=");
+    debugSerial->print(pins[virtualPinNumber].debounceDelay);
+    debugSerial->print("ms, Result=");
+    
+    ButtonState state = getVirtualPin(virtualPinNumber, false);
+    debugSerial->println(state == ON ? "ON" : state == OFF ? "OFF" : "NOT_READY");
+}
+
+void InputClass::debugSASWarningButton() {
+    if (debugSerial) {
+        debugSerial->println("SAS Warning Button (Pin 7):");
+    }
+    debugInputState(7);
 }
 
 #pragma endregion
