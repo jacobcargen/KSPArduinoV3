@@ -34,6 +34,7 @@ public:
 	 void update();
      void setAllVPinsReady();
 
+     ButtonState getVirtualPin(int virtualPinNumber, bool waitForChange = true);
      // Test Buttons
      byte getTestButton(bool waitForChange = true);
      byte getTestSwitch(bool waitForChange = true);

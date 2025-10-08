@@ -26,15 +26,15 @@ struct VirtualPin
 // ARDUINO PINS
 
 // Shift in A pins (8 registers)
-const int SHIFT_IN_A_SERIAL_PIN = 11;
-const int SHIFT_IN_A_CLOCK_ENABLE_PIN = 12;
-const int SHIFT_IN_A_CLOCK_PIN = 13;
-const int SHIFT_IN_A_LOAD_PIN = 14;
+const int SHIFT_IN_A_LOAD_PIN = 12;
+const int SHIFT_IN_A_CLOCK_PIN = 14;
+const int SHIFT_IN_A_CLOCK_ENABLE_PIN = 13;
+const int SHIFT_IN_A_SERIAL_PIN = 15;
 // Shift in B pins (2 registers)
-const int SHIFT_IN_B_SERIAL_PIN = 15;
-const int SHIFT_IN_B_CLOCK_ENABLE_PIN = 16;
+const int SHIFT_IN_B_LOAD_PIN = 16;
 const int SHIFT_IN_B_CLOCK_PIN = 17;
-const int SHIFT_IN_B_LOAD_PIN = 18;
+const int SHIFT_IN_B_CLOCK_ENABLE_PIN = 18;
+const int SHIFT_IN_B_SERIAL_PIN = 19;
 // Rotation Joystick X-Axis(Roll)
 const int ROTATION_X_AXIS_PIN = A0;
 // Rotation Joystick Y-Axis(Pitch)
@@ -115,22 +115,37 @@ void AddInput(bool& referenceToBoolVal, int virtualPin, int debounce = 100)
 /// <summary>Read a virtual pin. These are added with AddInput() and stored in pins array.</summary>
 /// <param name="virtualPin"></param>
 /// <returns>This returns the virtual pin state at index, virtual pin.</returns>
-ButtonState getVirtualPin(int virtualPin, bool waitForChange)
+ButtonState InputClass::getVirtualPin(int virtualPin, bool waitForChange)
 {
+    bool isDebug = false;
+   
     if (virtualPin < 0 || virtualPin >= numPins || pins[virtualPin].value == nullptr) {
-        if (debugSerial) {
+        if (debugSerial && isDebug) {
             debugSerial->println("Error: Virtual pin " + String(virtualPin) + " is out of range or not initialized.");
         }
         return NOT_READY;
     }
 
+    if (debugSerial && isDebug) {
+        debugSerial->print("Processing virtual pin ");
+        debugSerial->println(virtualPin);
+    }
+
     bool currentReading = *pins[virtualPin].value;
     unsigned long currentTime = millis();
+
+    if (debugSerial && isDebug) {
+        debugSerial->print("Current reading: ");
+        debugSerial->println(currentReading ? "HIGH" : "LOW");
+    }
 
     // Detect if the raw input has changed since the last loop
     if (currentReading != pins[virtualPin].lastReadingState) {
         // If it changed, reset the debounce timer
         pins[virtualPin].lastDebounceTime = currentTime;
+        if (debugSerial && isDebug) {
+            debugSerial->println("Raw input changed, resetting debounce timer");
+        }
     }
 
     // Update the last raw reading for the next loop
@@ -138,12 +153,22 @@ ButtonState getVirtualPin(int virtualPin, bool waitForChange)
 
     // After the debounce delay has passed...
     if ((currentTime - pins[virtualPin].lastDebounceTime) > pins[virtualPin].debounceDelay) {
+        if (debugSerial && isDebug) {
+            debugSerial->println("Debounce delay passed");
+        }
         // ...the reading is now stable. If the stable state needs updating, do it.
         if (pins[virtualPin].lastState != currentReading) {
             pins[virtualPin].lastState = currentReading;
+            if (debugSerial && isDebug) {
+                debugSerial->println("Stable state updated");
+            }
 
             // If in waitForChange mode, return the new state now
             if (waitForChange) {
+                if (debugSerial && isDebug) {
+                    debugSerial->print("WaitForChange mode, returning ");
+                    debugSerial->println(pins[virtualPin].lastState ? "ON" : "OFF");
+                }
                 return pins[virtualPin].lastState ? ON : OFF;
             }
         }
@@ -151,10 +176,17 @@ ButtonState getVirtualPin(int virtualPin, bool waitForChange)
 
     // For waitForChange mode, if we're here, it means no debounced change happened
     if (waitForChange) {
+        if (debugSerial && isDebug) {
+            debugSerial->println("WaitForChange mode, no change, returning NOT_READY");
+        }
         return NOT_READY;
     }
 
     // For normal mode, always return the last known stable state
+    if (debugSerial && isDebug) {
+        debugSerial->print("Normal mode, returning ");
+        debugSerial->println(pins[virtualPin].lastState ? "ON" : "OFF");
+    }
     return pins[virtualPin].lastState ? ON : OFF;
 }
 /// <summary>Initialize all of the virtual pins.</summary>

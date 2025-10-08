@@ -30,6 +30,8 @@ public:
 	void setTestLCD(String top, String bot);
 
 	void overrideSet(bool x[144]);
+
+	void setStateManual(char reg, int pin, bool state);
 	// Misc
 
 	void setPowerLED(bool state);

@@ -283,6 +283,7 @@ void OutputClass::overrideSet(bool x[144])
 /// <summary>Initialize the ouotputs for use.</summary>
 void OutputClass::init()
 {
+    
     bool x[144];
     for (int i = 0; i < 144; i++)
     {
@@ -363,7 +364,15 @@ void OutputClass::setTestLCD(String top, String bot)
 */
 // Misc
 
-
+void OutputClass::setStateManual(char reg, int pin, bool state)
+{
+    if (reg == 'A')
+        _sA[pin] = state;
+    else if (reg == 'B')
+        _sB[pin] = state;
+    else if (reg == 'C')
+        _sC[pin] = state;
+}
 void OutputClass::setPowerLED(bool state)
 {
     _sA[0] = state;

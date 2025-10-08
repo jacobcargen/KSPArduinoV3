@@ -183,8 +183,9 @@ void setup()
     initIO();
 
     // DEBUG MODE ENABLED
-    while (Input.getDebugSwitch(false) == ON)
+    while (true || Input.getDebugSwitch(false) == ON)
     {
+        Input.setAllVPinsReady();
         preKSPConnectionLoop();
     }
 
@@ -236,7 +237,7 @@ void loop()
     uint32_t simpitDelay = millis() - simpitStart;
 
 
-
+    /*
     if (timer.check())
     {
         //mySimpit.printToKSP("Loop: " + String(loopCount) + " | OUTPUT: " + String(outputDelay) + "ms", PRINT_TO_SCREEN);
@@ -244,7 +245,7 @@ void loop()
 
 
         Input.debugInputState(7);
-        /*
+        
         if (inPin7State == ON)
         {
             mySimpit.printToKSP("Pin 7 is ON", PRINT_TO_SCREEN);
@@ -257,7 +258,7 @@ void loop()
         {
             mySimpit.printToKSP("Pin 7 is NOT READY", PRINT_TO_SCREEN);
         }
-        */
+        
     }
 
     if (loopCount % 100 == 0) { // Check every 100 loops
@@ -265,6 +266,7 @@ void loop()
     }
 
     //refreshInputs();
+    */
 } 
 
 
@@ -274,6 +276,7 @@ void initIO()
     Output.init();
     // Initialize Input
     Input.init(Serial);
+    Input.setAllVPinsReady();
 
     // Test Output
     testOutput();
@@ -283,49 +286,41 @@ void initIO()
     Output.update();
     Input.update();
 }
+
+// Minimal loop rate tracker (prints every 3 seconds)
+static unsigned long __hz_lastPrintMs = 0;
+static unsigned long __hz_loopCount = 0;
+
 void preKSPConnectionLoop()
 {
-    Input.update();
-    Output.update();
-    printHz("Loop Time: ");
+    __hz_loopCount++;
 
-
-    setAllVPinsReady();
-
-    for (int i = 0; i < 80; i++)
+    delay(500); // Small delay to avoid overwhelming the CPU
+    
+    for (int i = 0; i < 144; i++)
     {
-        auto val = Input.getVirtualPin(i);
-        if (!NOT_READY)
+        Output.setStateManual('A', i, (i + __hz_loopCount) % 2 == 0);
+    }
+
+    Input.debugInputState(0);
+    for (int i = 0; i < 64; i++)
+    {
+        auto state = Input.getVirtualPin(i);
+        if (state != NOT_READY)
         {
-            if (val == ON)
-                Output.setTestLED(true);
-            else
-                Output.setTestLED(false);
+            Serial.print("Pin ");
+            Serial.print(i);
+            Serial.print(": ");
+            Serial.println(state == ON ? "ON" : "OFF");
         }
     }
+    
+    Output.setSpeedLCD("Waiting for KSP", "Pins Active");
 
 
+    Input.update();
+    Output.update();
 
-
-
-    //setStage();
-    /*
-    // INPUT READ EXAMPLE
-    byte val = Input.getTestSwitch();
-    switch (val)
-    {
-    case NOT_READY:
-        break;
-    case ON:
-        Output.setTestLED(true);
-        break;
-    case OFF:
-        Output.setTestLED(false);
-        break;
-    default:
-        break;
-    }
-    */
 }
 void testOutput()
 {
@@ -1519,25 +1514,25 @@ void refreshAllSASModes()
 {
     // SAS Modes
     if (Input.getSASStabilityAssistButton())
-        setSASMode(AP_STABILITYASSIST);
+        mySimpit.setSASMode(AP_STABILITYASSIST);
     if (Input.getSASManeuverButton())
-        setSASMode(AP_MANEUVER);
+        mySimpit.setSASMode(AP_MANEUVER);
     if (Input.getSASProgradeButton())
-        setSASMode(AP_PROGRADE);
+        mySimpit.setSASMode(AP_PROGRADE);
     if (Input.getSASRetrogradeButton())
-        setSASMode(AP_RETROGRADE);
+        mySimpit.setSASMode(AP_RETROGRADE);
     if (Input.getSASNormalButton())
-        setSASMode(AP_NORMAL);
+        mySimpit.setSASMode(AP_NORMAL);
     if (Input.getSASAntiNormalButton())
-        setSASMode(AP_ANTINORMAL);
+        mySimpit.setSASMode(AP_ANTINORMAL);
     if (Input.getSASRadialInButton())
-        setSASMode(AP_RADIALIN);
+        mySimpit.setSASMode(AP_RADIALIN);
     if (Input.getSASRadialOutButton())
-        setSASMode(AP_RADIALOUT);
+        mySimpit.setSASMode(AP_RADIALOUT);
     if (Input.getSASTargetButton())
-        setSASMode(AP_TARGET);
+        mySimpit.setSASMode(AP_TARGET);
     if (Input.getSASAntiTargetButton())
-        setSASMode(AP_ANTITARGET);
+        mySimpit.setSASMode(AP_ANTITARGET);
 
     switch (sasInfoMsg.currentSASMode)
     {

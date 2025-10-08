@@ -1,0 +1,10 @@
+- --- Input.cpp & Input.h ---
+	* Use only one function for getVirtualPin(), but use constant ints for parameters add to --> Input.h
+	* 
+
+ * Add debug stuff for all I/O in debug mode.
+ * Only run Serial.prints when in debug mode.
+ * Assign all io to correct pins
+ * Identify which features are WIP and complete
+ * Add a speaker yippie
+ *  
