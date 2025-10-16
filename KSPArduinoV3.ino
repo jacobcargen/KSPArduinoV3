@@ -33,8 +33,7 @@ public:
     bool check() // Check time and reset if ready
     {
         unsigned long currentMillis = millis();
-        if (currentMillis >= delayMillis + previousMillis)
-        {
+        if (currentMillis - previousMillis >= delayMillis) {  // Overflow-safe
             previousMillis = currentMillis;
             return true;
         }
@@ -185,7 +184,6 @@ void setup()
     // DEBUG MODE ENABLED
     while (true || Input.getDebugSwitch(false) == ON)
     {
-        Input.setAllVPinsReady();
         preKSPConnectionLoop();
     }
 
@@ -294,31 +292,33 @@ static unsigned long __hz_loopCount = 0;
 void preKSPConnectionLoop()
 {
     __hz_loopCount++;
-
-    delay(500); // Small delay to avoid overwhelming the CPU
+    printHz("\nPreKSPLoop");
+    Input.update();
     
     for (int i = 0; i < 144; i++)
     {
         Output.setStateManual('A', i, (i + __hz_loopCount) % 2 == 0);
     }
+	
+	for (int i = 0; i < 80; i++)
+	{
+		auto state = Input.getVirtualPin(i);
+		if (state != NOT_READY)
+		{
+			Serial.print("\nPin " + String(i));
+			Serial.print(" -->  " + String(state ? "On" : "Off"));
+		}
+	}
+	auto state = Input.getVirtualPin(0);
+	if (state != NOT_READY)
+	{
+		Serial.print("Pin 0 --> " + String(state ? "ON" : "OFF"));
+	}
+	
 
-    Input.debugInputState(0);
-    for (int i = 0; i < 64; i++)
-    {
-        auto state = Input.getVirtualPin(i);
-        if (state != NOT_READY)
-        {
-            Serial.print("Pin ");
-            Serial.print(i);
-            Serial.print(": ");
-            Serial.println(state == ON ? "ON" : "OFF");
-        }
-    }
-    
     Output.setSpeedLCD("Waiting for KSP", "Pins Active");
 
 
-    Input.update();
     Output.update();
 
 }

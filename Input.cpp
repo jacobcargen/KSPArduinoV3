@@ -17,8 +17,8 @@
 struct VirtualPin
 {
     bool* value;
-    bool lastState;
-    bool lastReadingState; // ADDED: Tracks the raw reading to correctly detect changes
+    bool lastReadingState; 
+	bool hasBeenRead;
     unsigned long lastDebounceTime;
     unsigned long debounceDelay;
 };
@@ -91,10 +91,10 @@ void AddInput(bool& referenceToBoolVal, int virtualPin, int debounce = 100)
         // Initialize the new elements that are not the one we are adding now
         for (int i = numPins; i < newSize; i++) {
             newPins[i].value = nullptr; // Or some other safe default
-            newPins[i].lastState = false;
             newPins[i].lastReadingState = false;
             newPins[i].lastDebounceTime = 0;
             newPins[i].debounceDelay = 100;
+            newPins[i].hasBeenRead = true;
         }
 
         // Delete the old array
@@ -107,92 +107,70 @@ void AddInput(bool& referenceToBoolVal, int virtualPin, int debounce = 100)
 
     // Now, we can safely add/overwrite the input at the specified index
     pins[virtualPin].value = &referenceToBoolVal;
-    pins[virtualPin].lastState = *pins[virtualPin].value;
     pins[virtualPin].lastReadingState = *pins[virtualPin].value;
-    pins[virtualPin].lastDebounceTime = 0;
+    pins[virtualPin].lastDebounceTime = millis();
     pins[virtualPin].debounceDelay = debounce;
+    pins[virtualPin].hasBeenRead = true;
 }
-/// <summary>Read a virtual pin. These are added with AddInput() and stored in pins array.</summary>
-/// <param name="virtualPin"></param>
-/// <returns>This returns the virtual pin state at index, virtual pin.</returns>
+
+
 ButtonState InputClass::getVirtualPin(int virtualPin, bool waitForChange)
 {
-    bool isDebug = false;
-   
+    // Validate pin
     if (virtualPin < 0 || virtualPin >= numPins || pins[virtualPin].value == nullptr) {
-        if (debugSerial && isDebug) {
-            debugSerial->println("Error: Virtual pin " + String(virtualPin) + " is out of range or not initialized.");
-        }
-        return NOT_READY;
+		if (debugSerial) debugSerial->print("\n\n!!! ---- INVALID PIN ---- !!!\n\n");
+		return NOT_READY;
     }
-
-    if (debugSerial && isDebug) {
-        debugSerial->print("Processing virtual pin ");
-        debugSerial->println(virtualPin);
-    }
-
+    
     bool currentReading = *pins[virtualPin].value;
-    unsigned long currentTime = millis();
-
-    if (debugSerial && isDebug) {
-        debugSerial->print("Current reading: ");
-        debugSerial->println(currentReading ? "HIGH" : "LOW");
-    }
-
-    // Detect if the raw input has changed since the last loop
+    unsigned long now = millis();
+    
+	/*
+	if (debugSerial)
+	{
+		debugSerial->print("\ncurrentReading=");
+		debugSerial->print(currentReading);
+		debugSerial->print(", lastReadingState=");
+		debugSerial->print(pins[virtualPin].lastReadingState);
+    	
+		debugSerial->print(", raw=");
+		debugSerial->print(*pins[virtualPin].value);
+	}
+	*/
+	 // Reset debounce timer if reading changed
     if (currentReading != pins[virtualPin].lastReadingState) {
-        // If it changed, reset the debounce timer
-        pins[virtualPin].lastDebounceTime = currentTime;
-        if (debugSerial && isDebug) {
-            debugSerial->println("Raw input changed, resetting debounce timer");
-        }
+		// Wait for debounce period to pass
+		unsigned long elapsed = now - pins[virtualPin].lastDebounceTime;
+		if (elapsed > pins[virtualPin].debounceDelay) {
+			// Passed the debounce and the value has changed
+			pins[virtualPin].hasBeenRead = false;
+			//if (debugSerial) debugSerial->print("Debounce passed, hasBeenRead set to false.");
+		}
+		else
+		{
+			//if (debugSerial) debugSerial->print("Debounce failed. Input was changed.");
+		}
+
+        pins[virtualPin].lastDebounceTime = now;
+        pins[virtualPin].lastReadingState = currentReading;
+	}
+	else if (!waitForChange) // If should return whether the value has changed or not
+	{
+    	return pins[virtualPin].lastReadingState ? ON : OFF; 
+	}
+	else
+	{
+		//if (debugSerial) debugSerial->print("No change...");
+	}
+    if (!pins[virtualPin].hasBeenRead) {
+    	pins[virtualPin].hasBeenRead = true;
+    	return pins[virtualPin].lastReadingState ? ON : OFF; 
     }
-
-    // Update the last raw reading for the next loop
-    pins[virtualPin].lastReadingState = currentReading;
-
-    // After the debounce delay has passed...
-    if ((currentTime - pins[virtualPin].lastDebounceTime) > pins[virtualPin].debounceDelay) {
-        if (debugSerial && isDebug) {
-            debugSerial->println("Debounce delay passed");
-        }
-        // ...the reading is now stable. If the stable state needs updating, do it.
-        if (pins[virtualPin].lastState != currentReading) {
-            pins[virtualPin].lastState = currentReading;
-            if (debugSerial && isDebug) {
-                debugSerial->println("Stable state updated");
-            }
-
-            // If in waitForChange mode, return the new state now
-            if (waitForChange) {
-                if (debugSerial && isDebug) {
-                    debugSerial->print("WaitForChange mode, returning ");
-                    debugSerial->println(pins[virtualPin].lastState ? "ON" : "OFF");
-                }
-                return pins[virtualPin].lastState ? ON : OFF;
-            }
-        }
-    }
-
-    // For waitForChange mode, if we're here, it means no debounced change happened
-    if (waitForChange) {
-        if (debugSerial && isDebug) {
-            debugSerial->println("WaitForChange mode, no change, returning NOT_READY");
-        }
-        return NOT_READY;
-    }
-
-    // For normal mode, always return the last known stable state
-    if (debugSerial && isDebug) {
-        debugSerial->print("Normal mode, returning ");
-        debugSerial->println(pins[virtualPin].lastState ? "ON" : "OFF");
-    }
-    return pins[virtualPin].lastState ? ON : OFF;
+    return NOT_READY;
 }
-/// <summary>Initialize all of the virtual pins.</summary>
+
 void initVirtualPins()
 {
-    // Calculate total number of pins and allocate memory once
     const int totalPins = 84;
     if (pins != nullptr) {
         delete[] pins;
@@ -202,16 +180,16 @@ void initVirtualPins()
 
     for (int i = 0; i < 64; i++)
     {
-        AddInput(_sIA[i], i, 10);
+        AddInput(_sIA[i], i, 150); // Changed from 10 to 150
     }
     for (int i = 0; i < 16; i++)
     {
-        AddInput(_sIB[i], i + 64, 25);
+        AddInput(_sIB[i], i + 64, 150); // Changed from 25 to 150
     }
-    AddInput(testButton, 80, 50);
-    AddInput(testSwitch, 81, 50);
-    AddInput(translationButton, 82, 50);
-    AddInput(rotationButton, 83, 50);
+    AddInput(testButton, 80, 150); // Changed from 50 to 150
+    AddInput(testSwitch, 81, 150); // Changed from 50 to 150
+    AddInput(translationButton, 82, 150);
+    AddInput(rotationButton, 83, 150);
 }
 /// <summary>Gets shift register inputs.</summary>
 void _shiftIn(int dataA, int clockEnableA, int clockA, int loadA,
@@ -277,6 +255,39 @@ void _shiftIn(int dataA, int clockEnableA, int clockA, int loadA,
             _sIB[i] = 1;
         }
     }
+    // Print table of all raw inputs
+    if (debugSerial)
+    {
+        debugSerial->println("\n--- Shift In A ---");
+        for (size_t row = 0; row < 8; row++)
+        {
+            for (size_t col = 0; col < 8; col++)
+            {
+                size_t i = row * 8 + col;
+                debugSerial->print("Pin ");
+                debugSerial->print(i);
+                debugSerial->print(": ");
+                debugSerial->print(_sIA[i]);
+                if (col < 7) debugSerial->print("\t");
+            }
+            debugSerial->println();
+        }
+        debugSerial->println("\n--- Shift In B ---");
+        for (size_t row = 0; row < 4; row++)
+        {
+            for (size_t col = 0; col < 4; col++)
+            {
+                size_t i = row * 4 + col;
+                debugSerial->print("Pin ");
+                debugSerial->print(i + 64);
+                debugSerial->print(": ");
+                debugSerial->print(_sIB[i]);
+                if (col < 3) debugSerial->print("\t");
+            }
+            debugSerial->println();
+        }
+    
+    }
 }
 
 #pragma endregion
@@ -324,10 +335,12 @@ void InputClass::setAllVPinsReady()
 {
     for (int i = 0; i < numPins; i++)
     {
-        pins[i].lastState = *pins[i].value;
+        pins[i].lastReadingState = *pins[i].value; // ADDED: keep aligned
         pins[i].lastDebounceTime = millis();
+        pins[i].hasBeenRead = true;
     }
 }
+
 
 // Testing
 
@@ -737,18 +750,6 @@ void InputClass::debugInputState(int virtualPinNumber) {
         debugSerial->println(": Invalid pin");
         return;
     }
-    
-    debugSerial->print("Pin ");
-    debugSerial->print(virtualPinNumber);
-    debugSerial->print(": Raw=");
-    debugSerial->print(*pins[virtualPinNumber].value ? "HIGH" : "LOW");
-    debugSerial->print(", LastState=");
-    debugSerial->print(pins[virtualPinNumber].lastState ? "HIGH" : "LOW");
-    debugSerial->print(", Time since change=");
-    debugSerial->print(millis() - pins[virtualPinNumber].lastDebounceTime);
-    debugSerial->print("ms, Debounce delay=");
-    debugSerial->print(pins[virtualPinNumber].debounceDelay);
-    debugSerial->print("ms, Result=");
     
     ButtonState state = getVirtualPin(virtualPinNumber, false);
     debugSerial->println(state == ON ? "ON" : state == OFF ? "OFF" : "NOT_READY");
