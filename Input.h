@@ -10,6 +10,111 @@
 #ifndef _INPUT_h
 #define _INPUT_h
 
+// Virtual Pin Definitions
+// Test Buttons
+#define VPIN_TEST_BUTTON 1
+#define VPIN_TEST_SWITCH 2
+
+// Miscellaneous
+#define VPIN_DEBUG_SWITCH 0
+#define VPIN_SOUND_SWITCH 3
+#define VPIN_INPUT_ENABLE_BUTTON 4
+
+// Warnings
+#define VPIN_TEMP_WARNING_BUTTON 5
+#define VPIN_GEE_WARNING_BUTTON 6
+#define VPIN_WARP_WARNING_BUTTON 7
+#define VPIN_BRAKE_WARNING_BUTTON 8
+#define VPIN_SAS_WARNING_BUTTON 9
+#define VPIN_RCS_WARNING_BUTTON 10
+#define VPIN_GEAR_WARNING_BUTTON 11
+#define VPIN_COMMS_WARNING_BUTTON 12
+#define VPIN_ALT_WARNING_BUTTON 13
+#define VPIN_PITCH_WARNING_BUTTON 14
+
+// Display Controls
+#define VPIN_INFO_MODE 15
+#define VPIN_DIRECTION_MODE 16
+#define VPIN_STAGE_VIEW_SWITCH 17
+#define VPIN_VERTICAL_VELOCITY_SWITCH 18
+#define VPIN_REFERENCE_MODE_BUTTON 19
+#define VPIN_RADAR_ALTITUDE_SWITCH 20
+
+// Staging
+#define VPIN_STAGE_BUTTON 21
+#define VPIN_STAGE_LOCK_SWITCH 22
+
+// Aborting
+#define VPIN_ABORT_BUTTON 23
+#define VPIN_ABORT_LOCK_SWITCH 24
+
+// Custom Action Groups
+#define VPIN_CAG1 25
+#define VPIN_CAG2 26
+#define VPIN_CAG3 27
+#define VPIN_CAG4 28
+#define VPIN_CAG5 29
+#define VPIN_CAG6 30
+#define VPIN_CAG7 31
+#define VPIN_CAG8 32
+#define VPIN_CAG9 33
+#define VPIN_CAG10 34
+
+// Other Action Groups
+#define VPIN_DOCKING_SWITCH 35
+#define VPIN_PRECISION_SWITCH 36
+#define VPIN_LIGHTS_SWITCH 37
+#define VPIN_GEAR_SWITCH 38
+#define VPIN_BRAKE_SWITCH 39
+
+// View
+#define VPIN_SCREENSHOT_BUTTON 40
+#define VPIN_UI_SWITCH 41
+#define VPIN_NAV_SWITCH 42
+#define VPIN_VIEW_SWITCH 43
+#define VPIN_FOCUS_BUTTON 44
+#define VPIN_CAM_MODE_BUTTON 45
+#define VPIN_CAM_RESET_BUTTON 46
+#define VPIN_ENABLE_LOOK_BUTTON 47
+
+// Warping & Pause
+#define VPIN_WARP_LOCK_SWITCH 48
+#define VPIN_PHYS_WARP_SWITCH 49
+#define VPIN_CANCEL_WARP_BUTTON 50
+#define VPIN_DECREASE_WARP_BUTTON 51
+#define VPIN_INCREASE_WARP_BUTTON 52
+#define VPIN_PAUSE_BUTTON 53
+
+// SAS & RCS
+#define VPIN_SAS_STABILITY_ASSIST_BUTTON 54
+#define VPIN_SAS_MANEUVER_BUTTON 55
+#define VPIN_SAS_PROGRADE_BUTTON 56
+#define VPIN_SAS_RETROGRADE_BUTTON 57
+#define VPIN_SAS_NORMAL_BUTTON 58
+#define VPIN_SAS_ANTI_NORMAL_BUTTON 59
+#define VPIN_SAS_RADIAL_IN_BUTTON 60
+#define VPIN_SAS_RADIAL_OUT_BUTTON 61
+#define VPIN_SAS_TARGET_BUTTON 62
+#define VPIN_SAS_ANTI_TARGET_BUTTON 63
+#define VPIN_SAS_SWITCH 64
+#define VPIN_RCS_SWITCH 65
+
+// EVA Specific Controls
+#define VPIN_BOARD_BUTTON 66
+#define VPIN_GRAB_BUTTON 67
+#define VPIN_JUMP_BUTTON 68
+
+// Throttle
+#define VPIN_THROTTLE_LOCK_SWITCH 69
+
+// Translation
+#define VPIN_TRANS_HOLD_BUTTON 70
+#define VPIN_TRANS_RESET_BUTTON 71
+
+// Rotation
+#define VPIN_ROT_HOLD_BUTTON 72
+#define VPIN_ROT_RESET_BUTTON 73
+
 enum ButtonState
 {
     OFF = 0,
@@ -35,119 +140,22 @@ public:
      void setAllVPinsReady();
 
      ButtonState getVirtualPin(int virtualPinNumber, bool waitForChange = true);
-     // Test Buttons
-     byte getTestButton(bool waitForChange = true);
-     byte getTestSwitch(bool waitForChange = true);
-
-     // Miscellaneous
-     byte getDebugSwitch(bool waitForChange = true);
-     byte getSoundSwitch(bool waitForChange = true);
-     byte getInputEnableButton(bool waitForChange = true);
-
-     // Warnings
-     byte getTempWarningButton(bool waitForChange = true);
-     byte getGeeWarningButton(bool waitForChange = true);
-     byte getWarpWarningButton(bool waitForChange = true);
-     byte getBrakeWarningButton(bool waitForChange = true);
-     byte getSASWarningButton(bool waitForChange = true);
-     byte getRCSWarningButton(bool waitForChange = true);
-     byte getGearWarningButton(bool waitForChange = true);
-     byte getCommsWarningButton(bool waitForChange = true);
-     byte getAltWarningButton(bool waitForChange = true);
-     byte getPitchWarningButton(bool waitForChange = true);
-
-     // Display Controls
-     byte getInfoMode();
-     byte getDirectionMode();
-     byte getStageViewSwitch(bool waitForChange = true);
-     byte getVerticalVelocitySwitch(bool waitForChange = true);
-     byte getReferenceModeButton(bool waitForChange = true);
-     byte getRadarAltitudeSwitch(bool waitForChange = true);
-
-     // Staging
-     byte getStageButton(bool waitForChange = true);
-     byte getStageLockSwitch(bool waitForChange = true);
-
-     // Aborting
-     byte getAbortButton(bool waitForChange = true);
-     byte getAbortLockSwitch(bool waitForChange = true);
-
-     // Custom Action Groups
-     byte getCAG1(bool waitForChange = true); 
-     byte getCAG2(bool waitForChange = true); 
-     byte getCAG3(bool waitForChange = true); 
-     byte getCAG4(bool waitForChange = true); 
-     byte getCAG5(bool waitForChange = true); 
-     byte getCAG6(bool waitForChange = true); 
-     byte getCAG7(bool waitForChange = true); 
-     byte getCAG8(bool waitForChange = true); 
-     byte getCAG9(bool waitForChange = true); 
-     byte getCAG10(bool waitForChange = true);
-
-     // Other Action Groups
-     byte getDockingSwitch(bool waitForChange = true);
-     byte getPercisionSwitch(bool waitForChange = true);
-     byte getLightsSwitch(bool waitForChange = true);
-     byte getGearSwitch(bool waitForChange = true);
-     byte getBrakeSwitch(bool waitForChange = true);
-
-     // View
-     byte getScreenshotButton(bool waitForChange = true);
-     byte getUISwitch(bool waitForChange = true);
-     byte getNavSwitch(bool waitForChange = true);
-     byte getViewSwitch(bool waitForChange = true);
-     byte getFocusButton(bool waitForChange = true);
-     byte getCamModeButton(bool waitForChange = true);
-     byte getCamResetButton(bool waitForChange = true);
-     byte getEnableLookButton(bool waitForChange = true);
-
-     // Warping & Pause
-     byte getWarpLockSwitch(bool waitForChange = true);
-     byte getPhysWarpSwitch(bool waitForChange = true);
-     byte getCancelWarpButton(bool waitForChange = true);
-     byte getDecreaseWarpButton(bool waitForChange = true);
-     byte getIncreaseWarpButton(bool waitForChange = true);
-     byte getPauseButton(bool waitForChange = true);
-
-     // SAS & RCS
-     byte getSASStabilityAssistButton(bool waitForChange = true);
-     byte getSASManeuverButton(bool waitForChange = true);
-     byte getSASProgradeButton(bool waitForChange = true);
-     byte getSASRetrogradeButton(bool waitForChange = true);
-     byte getSASNormalButton(bool waitForChange = true);
-     byte getSASAntiNormalButton(bool waitForChange = true);
-     byte getSASRadialInButton(bool waitForChange = true);
-     byte getSASRadialOutButton(bool waitForChange = true);
-     byte getSASTargetButton(bool waitForChange = true);
-     byte getSASAntiTargetButton(bool waitForChange = true);
-     byte getSASSwitch(bool waitForChange = true);
-     byte getRCSSwitch(bool waitForChange = true);
-
-     // EVA Specific Controls
-     byte getBoardButton(bool waitForChange = true);
-     byte getGrabButton(bool waitForChange = true);
-     byte getJumpButton(bool waitForChange = true);
 
      // Throttle
      int getThrottleAxis(); 
-     byte getThrottleLockSwitch(bool waitForChange = true);
 
      // Translation
      int getTranslationXAxis(); 
      int getTranslationYAxis(); 
      int getTranslationZAxis(); 
-     byte getTransHoldButton(bool waitForChange = true);
-     byte getTransResetButton(bool waitForChange = true);
 
      // Rotation
      int getRotationXAxis(); 
      int getRotationYAxis(); 
      int getRotationZAxis(); 
-     byte getRotHoldButton(bool waitForChange = true);
-     byte getRotResetButton(bool waitForChange = true);
 
      // Debugging
-     void debugInputState(int virtualPinNumber);  // No Serial parameter needed
+     void debugInputState(int virtualPinNumber);  
      void debugSASWarningButton();
 
 	 ~InputClass();  // Destructor declaration

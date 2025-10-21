@@ -6,9 +6,72 @@
 */
 
 // Output.h
+#include <pins_arduino.h> 
+#include <variant.h> 
+#include <LiquidCrystal_I2C.h>
 
 #ifndef _OUTPUT_h
 #define _OUTPUT_h
+
+// VPin structure definition
+struct VPin
+{
+    char reg;  // 'A', 'B', or 'C'
+    int pin;  // 0-63 for A/B, 0-15 for C
+};
+
+// LED Virtual Pin Definitions
+const VPin VLED_POWER = {'A', 0};
+
+// Warnings
+const VPin VLED_TEMP_WARNING = {'A', 1};
+const VPin VLED_GEE_WARNING = {'A', 2};
+const VPin VLED_WARP_WARNING = {'A', 3};
+const VPin VLED_BRAKE_WARNING = {'A', 4};
+const VPin VLED_SAS_WARNING = {'A', 5};
+const VPin VLED_RCS_WARNING = {'A', 6};
+const VPin VLED_GEAR_WARNING = {'A', 7};
+const VPin VLED_COMMS_WARNING = {'A', 8};
+const VPin VLED_ALT_WARNING = {'A', 9};
+const VPin VLED_PITCH_WARNING = {'A', 10};
+
+// Staging
+const VPin VLED_STAGE = {'A', 11};
+
+// Aborting
+const VPin VLED_ABORT = {'A', 12};
+
+// Custom Action Groups
+const VPin VLED_CAG1 = {'A', 13};
+const VPin VLED_CAG2 = {'A', 14};
+const VPin VLED_CAG3 = {'A', 15};
+const VPin VLED_CAG4 = {'A', 16};
+const VPin VLED_CAG5 = {'A', 17};
+const VPin VLED_CAG6 = {'A', 18};
+const VPin VLED_CAG7 = {'A', 19};
+const VPin VLED_CAG8 = {'A', 20};
+const VPin VLED_CAG9 = {'A', 21};
+const VPin VLED_CAG10 = {'A', 22};
+
+// SAS Modes
+const VPin VLED_SAS_STABILITY_ASSIST = {'A', 23};
+const VPin VLED_SAS_MANEUVER = {'A', 24};
+const VPin VLED_SAS_PROGRADE = {'A', 25};
+const VPin VLED_SAS_RETROGRADE = {'A', 26};
+const VPin VLED_SAS_NORMAL = {'A', 27};
+const VPin VLED_SAS_ANTI_NORMAL = {'A', 28};
+const VPin VLED_SAS_RADIAL_IN = {'A', 29};
+const VPin VLED_SAS_RADIAL_OUT = {'A', 30};
+const VPin VLED_SAS_TARGET = {'A', 31};
+const VPin VLED_SAS_ANTI_TARGET = {'A', 32};
+
+// Bar Graph Base Pins (each bar has 20 consecutive LEDs)
+const VPin VLED_SOLID_FUEL_BASE = {'A', 33};        // A33-A52
+const VPin VLED_LIQUID_FUEL_BASE = {'A', 53};       // A53-B8 (wraps to next register)
+const VPin VLED_OXIDIZER_BASE = {'B', 9};           // B9-B28
+const VPin VLED_MONOPROPELLANT_BASE = {'B', 29};    // B29-B48
+const VPin VLED_ELECTRICITY_BASE = {'B', 49};       // B49-C4 (wraps to next register)
+
 
 #if defined(ARDUINO) && ARDUINO >= 100
     #include "Arduino.h" 
@@ -26,79 +89,13 @@ public:
 	void init();
 	void update();
 
-	void setTestLED(bool state);
-	void setTestLCD(String top, String bot);
-
-	void overrideSet(bool x[144]);
-
-	void setStateManual(char reg, int pin, bool state);
-	// Misc
-
-	void setPowerLED(bool state);
-
-	// Warnings
-
-	void setTempWarningLED(bool state);
-	void setGeeWarningLED(bool state);
-	void setWarpWarningLED(bool state);
-	void setBrakeWarningLED(bool state);
-	void setSASWarningLED(bool state);
-	void setRCSWarningLED(bool state);
-	void setGearWarningLED(bool state);
-	void setCommsWarningLED(bool state);
-	void setAltWarningLED(bool state);
-	void setPitchWarningLED(bool state);
-
+	void setLED(VPin vPin, bool state);
 	// Displays
-
 	void setSpeedLCD(String top, String bot);
 	void setAltitudeLCD(String top, String bot);
 	void setHeadingLCD(String top, String bot);
 	void setDirectionLCD(String top, String bot);
 	void setInfoLCD(String top, String bot);
-
-	// Resources
-
-	void setSolidFuelLEDs(bool states[20]);
-	void setLiquidFuelLEDs(bool states[20]);
-	void setOxidizerLEDs(bool states[20]);
-	void setMonopropellantLEDs(bool states[20]);
-	void setElectricityLEDs(bool states[20]);
-
-	// Staging
-
-	void setStageLED(bool state);
-
-	// Aborting
-
-	void setAbortLED(bool state);
-
-	// Custom Action Groups
-
-	void setCAG1LED(bool state);
-	void setCAG2LED(bool state);
-	void setCAG3LED(bool state);
-	void setCAG4LED(bool state);
-	void setCAG5LED(bool state);
-	void setCAG6LED(bool state);
-	void setCAG7LED(bool state);
-	void setCAG8LED(bool state);
-	void setCAG9LED(bool state);
-	void setCAG10LED(bool state);
-
-	// SAS
-
-	void setSASStabilityAssistLED(bool state);
-	void setSASManeuverLED(bool state);
-	void setSASProgradeLED(bool state);
-	void setSASRetrogradeLED(bool state);
-	void setSASNormalLED(bool state);
-	void setSASAntiNormalLED(bool state);
-	void setSASRadialInLED(bool state);
-	void setSASRadialOutLED(bool state);
-	void setSASTargetLED(bool state);
-	void setSASAntiTargetLED(bool state);
-
 };
 
 extern OutputClass Output;
