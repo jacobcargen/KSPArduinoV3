@@ -36,24 +36,7 @@ const int SHIFT_IN_B_LOAD_PIN = 16;
 const int SHIFT_IN_B_CLOCK_PIN = 17;
 const int SHIFT_IN_B_CLOCK_ENABLE_PIN = 18;
 const int SHIFT_IN_B_SERIAL_PIN = 19;
-// Rotation Joystick X-Axis(Roll)
-const int ROTATION_X_AXIS_PIN = A0;
-// Rotation Joystick Y-Axis(Pitch)
-const int ROTATION_Y_AXIS_PIN = A1;
-// Rotation Joystick Z-Axis(Yaw)
-const int ROTATION_Z_AXIS_PIN = A2;
-// Rotation Joystick Button
-const int ROTATION_BUTTON_PIN = A3;
-// Translation Joystick X-Axis(Left/Right)
-const int TRANSLATION_X_AXIS_PIN = A4;
-// Translation Joystick Y-Axis(Forward/Back)
-const int TRANSLATION_Y_AXIS_PIN = A5;
-// Translation Joystick Z-Axis(Up/Down)
-const int TRANSLATION_Z_AXIS_PIN = A6;
-// Translation Joystick ButtonTRAN
-const int TRANSLATION_BUTTON_PIN = A7;
-// Throttle Axis
-const int THROTTLE_AXIS_PIN = A8;
+
 // Test pins
 const byte TEST_BUTTON = 51;
 const byte TEST_SWITCH = 50;

@@ -25,7 +25,7 @@ int const ARDUINO_PINS[10] = {22,23,24,25,26,27,28,29,30,31};
 // Shift out pins
 bool _sA[64] = { 0 };
 bool _sB[64] = { 0 };
-bool _sC[16] = { 0 };
+bool _sC[8]  = { 0 };
 
 bool arduinoPinsOutput[10] = { 0 };
 
@@ -36,20 +36,25 @@ LiquidCrystal_I2C _speedLCD(0x26, 16, 2);
 // Altitude LCD
 LiquidCrystal_I2C _altitudeLCD(0x25, 16, 2);
 // Info LCD
-LiquidCrystal_I2C _infoLCD(0x23, 16, 2);
+LiquidCrystal_I2C _infoLCD(0x22, 16, 2);
 // Direction LCD
-LiquidCrystal_I2C _directionLCD(0x22, 16, 2);
+LiquidCrystal_I2C _directionLCD(0x23, 16, 2);
 
 // Text for speed lcd
 String _speedLCDTopTxt, _speedLCDBotTxt;
+String _lastSpeedTop, _lastSpeedBot;
 // Text for altitude lcd
 String _altitudeLCDTopTxt, _altitudeLCDBotTxt;
+String _lastAltitudeTop, _lastAltitudeBot;
 // Text for info lcd
 String _infoLCDTopTxt, _infoLCDBotTxt;
+String _lastInfoTop, _lastInfoBot;
 // Text for heading lcd
 String _headingLCDTopTxt, _headingLCDBotTxt;
+String _lastHeadingTop, _lastHeadingBot;
 // Text for direction lcd
 String _directionLCDTopTxt, _directionLCDBotTxt;
+String _lastDirectionTop, _lastDirectionBot;
 
 
 void _sendShiftOut(bool states[], int size, int dataPin, int latchPin, int clockPin)
@@ -106,16 +111,24 @@ void _sendShiftOut(bool states[], int size, int dataPin, int latchPin, int clock
     digitalWrite(latchPin, HIGH);
 }
 
-void _sendLCD(LiquidCrystal_I2C lcd, String line1, String line2)
+void _sendLCD(LiquidCrystal_I2C &lcd, String &lastLine1, String &lastLine2, String newLine1, String newLine2)
 {
-    // Clear LCD
-    lcd.clear();
-    // Print to top line
-    lcd.setCursor(0, 0);
-    lcd.print(line1);
-    // Print to bottom line
-    lcd.setCursor(0, 1);
-    lcd.print(line2);
+    // Only update if text changed
+    if (lastLine1 != newLine1 || lastLine2 != newLine2)
+    {
+        // Clear LCD only if needed
+        lcd.clear();
+        // Print to top line
+        lcd.setCursor(0, 0);
+        lcd.print(newLine1);
+        // Print to bottom line
+        lcd.setCursor(0, 1);
+        lcd.print(newLine2);
+        
+        // Update last values
+        lastLine1 = newLine1;
+        lastLine2 = newLine2;
+    }
 }
 
 /// <summary>Initialize the ouotputs for use.</summary>
@@ -152,38 +165,42 @@ void OutputClass::init()
 
     _sendShiftOut(_sA, 64, _SHIFT_OUT_A_DATA_PIN, _SHIFT_OUT_A_LATCH_PIN, _SHIFT_OUT_A_CLOCK_PIN);
     _sendShiftOut(_sB, 64, _SHIFT_OUT_B_DATA_PIN, _SHIFT_OUT_B_LATCH_PIN, _SHIFT_OUT_B_CLOCK_PIN);
-    _sendShiftOut(_sC, 64, _SHIFT_OUT_C_DATA_PIN, _SHIFT_OUT_C_LATCH_PIN, _SHIFT_OUT_C_CLOCK_PIN);
+    _sendShiftOut(_sC, 8, _SHIFT_OUT_C_DATA_PIN, _SHIFT_OUT_C_LATCH_PIN, _SHIFT_OUT_C_CLOCK_PIN);
     
 }
 /// <summary>Update the controller outputs.</summary>
 void OutputClass::update()
 {
-    /*
-    _sendLCD(_speedLCD, _speedLCDTopTxt, _speedLCDBotTxt);
-    _sendLCD(_altitudeLCD, _altitudeLCDTopTxt, _altitudeLCDBotTxt);
-    _sendLCD(_headingLCD, _headingLCDTopTxt, _headingLCDBotTxt);
-    _sendLCD(_infoLCD, _infoLCDTopTxt, _infoLCDBotTxt);
-    _sendLCD(_directionLCD, _directionLCDTopTxt, _directionLCDBotTxt);
-    */
+    
+    _sendLCD(_speedLCD, _lastSpeedTop, _lastSpeedBot, _speedLCDTopTxt, _speedLCDBotTxt);
+    _sendLCD(_altitudeLCD, _lastAltitudeTop, _lastAltitudeBot, _altitudeLCDTopTxt, _altitudeLCDBotTxt);
+    _sendLCD(_headingLCD, _lastHeadingTop, _lastHeadingBot, _headingLCDTopTxt, _headingLCDBotTxt);
+    _sendLCD(_infoLCD, _lastInfoTop, _lastInfoBot, _infoLCDTopTxt, _infoLCDBotTxt);
+    _sendLCD(_directionLCD, _lastDirectionTop, _lastDirectionBot, _directionLCDTopTxt, _directionLCDBotTxt);
+    
     _sendShiftOut(_sA, 64, _SHIFT_OUT_A_DATA_PIN, _SHIFT_OUT_A_LATCH_PIN, _SHIFT_OUT_A_CLOCK_PIN);
     _sendShiftOut(_sB, 64, _SHIFT_OUT_B_DATA_PIN, _SHIFT_OUT_B_LATCH_PIN, _SHIFT_OUT_B_CLOCK_PIN);
-    _sendShiftOut(_sC, 64, _SHIFT_OUT_C_DATA_PIN, _SHIFT_OUT_C_LATCH_PIN, _SHIFT_OUT_C_CLOCK_PIN);
+    _sendShiftOut(_sC, 8, _SHIFT_OUT_C_DATA_PIN, _SHIFT_OUT_C_LATCH_PIN, _SHIFT_OUT_C_CLOCK_PIN);
     for (auto pin : ARDUINO_PINS)
 	{
 		digitalWrite(pin, arduinoPinsOutput[pin - 22]);
 	}
 }
 
-void OutputClass::setLED(VPin vPin, bool state)
+void OutputClass::setLED(int pin, bool state)
 {
-    if (vPin.reg == 'A')
-        _sA[vPin.pin] = state;
-    else if (vPin.reg == 'B')
-        _sB[vPin.pin] = state;
-    else if (vPin.reg == 'C')
-        _sC[vPin.pin] = state;
-    else if (vPin.reg == 'D')
-        arduinoPinsOutput[vPin.pin] = state;
+	// edge case, need to flip dont ask why. It was easier to do this then try and dig through the wires...
+	if (pin == 111 || pin == 112)
+		state = !state;
+		
+	if (pin < 64)
+	    _sA[pin] = state;
+	else if (pin < 128)
+		_sB[pin - 64] = state;
+	else if (pin < 136)
+	    _sC[pin - 128] = state;
+	else if (pin <= TOTAL_LEDS) // Not on shift register, on arduino
+		arduinoPinsOutput[pin - 136] = state;
 }
 
 // Displays
