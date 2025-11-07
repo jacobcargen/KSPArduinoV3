@@ -5,10 +5,8 @@
  Copyright: Jacob Cargen
 */
 
+#include <Arduino.h>
 #include "Output.h"
-#include <pins_arduino.h> 
-#include <variant.h> 
-#include <LiquidCrystal_I2C.h>
 
 int const _SHIFT_OUT_A_DATA_PIN = 2;
 int const _SHIFT_OUT_A_LATCH_PIN = 3;
@@ -30,7 +28,7 @@ bool _sC[8]  = { 0 };
 bool arduinoPinsOutput[10] = { 0 };
 
 // Heading LCD
-LiquidCrystal_I2C _headingLCD(0x27, 16, 2); // I2C address 0x27, 16 column and 2 rows
+LiquidCrystal_I2C _headingLCD(0x23, 16, 2); // I2C address 0x23, 16 column and 2 rows
 // Speed LCD
 LiquidCrystal_I2C _speedLCD(0x26, 16, 2);
 // Altitude LCD
@@ -38,7 +36,7 @@ LiquidCrystal_I2C _altitudeLCD(0x25, 16, 2);
 // Info LCD
 LiquidCrystal_I2C _infoLCD(0x22, 16, 2);
 // Direction LCD
-LiquidCrystal_I2C _directionLCD(0x23, 16, 2);
+LiquidCrystal_I2C _directionLCD(0x27, 16, 2);
 
 // Text for speed lcd
 String _speedLCDTopTxt, _speedLCDBotTxt;
@@ -229,5 +227,7 @@ void OutputClass::setInfoLCD(String top, String bot)
     _infoLCDTopTxt = top;
     _infoLCDBotTxt = bot;
 }
+
+
 
 OutputClass Output;

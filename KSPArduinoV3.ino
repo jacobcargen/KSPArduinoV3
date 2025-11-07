@@ -6,7 +6,6 @@
 */
 
 #include "Wire.h"
-#include "Print.h"
 #include "Output.h"
 #include "Input.h"
 #include <PayloadStructs.h>
@@ -14,13 +13,15 @@
 #include <KerbalSimpit.h>
 #include <LiquidCrystal_I2C.h>
 
+
+#define SOUND_PIN 11
+
 class Timer
 {
 private:
 
     unsigned long previousMillis = 0;
     unsigned long delayMillis = 0;
-
 
 public:
 
@@ -42,6 +43,92 @@ public:
 
 };
 
+
+class BeepSound {
+    
+private:
+
+    Timer _timer;
+
+    bool _soundEnabled = true;
+    bool _isBeeping = false;
+
+    int* _pattern = nullptr;
+    int _patternLength = 0;
+    int _patternIndex = 0;
+    int _beepInterval = 0;
+
+    
+
+public:
+    BeepSound() {}
+
+    // Mute/unmute this sound instance
+    void muteSound(bool isMute) {
+        _soundEnabled = !isMute;
+        if (isMute) {
+            Output.setSound(0, false);
+        }
+    }
+
+    // Start or stop a custom beep pattern
+    void beep(int* pattern, int patternLength, bool isEnabled, int beepRateMs) {
+        if (!_soundEnabled) return;
+
+        if (isEnabled) {
+            _pattern = pattern;
+            _patternLength = patternLength;
+            _isBeeping = true;
+            _beepInterval = beepRateMs;
+            _patternIndex = 0;
+            _timer.start(_beepInterval);
+        } else {
+            _isBeeping = false;
+            setSound(0, false);
+        }
+    }
+
+    // Non-blocking update function
+    void updateBeep() {
+        if (!_soundEnabled || !_isBeeping || _pattern == nullptr) return;
+
+        // When timer elapses, move to next tone
+        if (_timer.check()) {
+            int freq = _pattern[_patternIndex];
+            setSound(freq, (freq > 0));
+
+            _patternIndex++;
+            if (_patternIndex >= _patternLength) {
+                _patternIndex = 0; // Loop pattern
+            }
+
+            _timer.start(_beepInterval);
+        }
+    }
+
+    void setSound(int frequency, bool enabled)
+    {
+        if (enabled && frequency > 0) {
+            // Use analogWrite with 50% duty cycle to generate tone
+            // Arduino Due supports analogWrite on most pins
+            analogWrite(SOUND_PIN, 200); // 127 = 50% of 255
+            
+            // Note: This produces a fixed frequency PWM, not a true tone
+            // For proper tone generation, we'd need timer interrupts
+            // But this should produce audible sound on a buzzer
+        } else {
+            analogWrite(SOUND_PIN, 0);
+        }
+    }
+};
+
+// Global beep controller
+BeepSound beepSound;
+BeepSound beepSound2;  // Second beep controller
+
+int PATTERN_COMMS[] = {1000};
+int PATTERN_TEMP[] = {2000, 0};
+
 struct actionGroups
 {
 public:
@@ -53,27 +140,7 @@ public:
     bool isGear;
     bool isBrake;
 };
-struct inputStates
-{
 
-};
-enum infoModes
-{
-    EMPTY = 0,
-    A = 1,
-    B = 2,
-    C = 3,
-    D = 4,
-    E = 5,
-    F = 6,
-    G = 7,
-    H = 8,
-    I = 9,
-    J = 10,
-    K = 11,
-    L = 12,
-    
-};
 enum speedMode
 {
     SPEED_SURFACE_MODE,
@@ -81,8 +148,6 @@ enum speedMode
     SPEED_TARGET_MODE,
     SPEED_VERTICAL_MODE
 };
-
-#pragma region Ksp Simpit
 
 // Create insatance of Simpit
 KerbalSimpit mySimpit(Serial);
@@ -123,9 +188,12 @@ targetMessage targetMsg;
 actionGroups ag;
 String soi = "";
 
-#pragma endregion
+// Track vessel changes (use multiple properties to distinguish vessel change from staging)
+byte lastVesselStage = 255;  // 255 = uninitialized
+byte lastVesselType = 255;   // Track vessel type to detect actual vessel changes
+byte lastCrewCount = 255;    // Track crew count as additional identifier
 
-byte infoMode = EMPTY;
+byte infoMode = 0;       // Track which info mode (1-12)
 byte directionMode = 0;  // Track which direction mode (1-12)
 
 
@@ -136,51 +204,106 @@ byte directionMode = 0;  // Track which direction mode (1-12)
 // Degree character for the lcd
 const char DEGREE_CHAR_LCD = 223;
 
-// Warning thresholds
+// Timer intervals (milliseconds)
+const unsigned long MAIN_LOOP_INTERVAL = 1000;
+const unsigned long LCD_UPDATE_INTERVAL = 250;
+const unsigned long TWO_SECOND_INTERVAL = 2000;
+const unsigned long THROTTLE_DEBUG_INTERVAL = 500;
+const unsigned long MANUAL_REFRESH_INTERVAL = 1000;
+const unsigned long CAMERA_UPDATE_INTERVAL = 50;
+const unsigned long HOLD_OVERRIDE_DELAY = 2000;
 
-byte COMMS_WARNING_THRESHOLD = 50; // 50%
-int LOW_ALTITUDE_WARNING_THRESHOLD = 10000; // Warning light turns solid if below this altitude in meters
-byte HIGH_GEE_WARNING_SOLID_THRESHOLD = 5; // 5G
-byte HIGH_GEE_WARNING_BLINKING_THRESHOLD = 7; // 7G
-byte HIGH_TEMP_WARNING_SOLID_THRESHOLD = 25; // 50%
-byte HIGH_TEMP_WARNING_BLINKING_THRESHOLD = 50; // 75%
+// LED blink intervals (milliseconds)
+const unsigned long TEMP_WARNING_BLINK_INTERVAL = 250;
+const unsigned long GEE_WARNING_BLINK_INTERVAL = 250;
+const unsigned long GEAR_WARNING_BLINK_INTERVAL = 250;
+const unsigned long PITCH_WARNING_BLINK_INTERVAL = 200;
+const unsigned long AUTOPILOT_LED_BLINK_INTERVAL = 1000;
+
+// Startup delays (milliseconds)
+const unsigned long STARTUP_BEEP_DELAY = 200;
+
+// Warning thresholds
+const byte COMMS_WARNING_THRESHOLD = 50; // 50%
+const int LOW_ALTITUDE_WARNING_THRESHOLD = 200; // TERRAIN warning: below this altitude in meters (match KSP mod)
+const float TIME_TO_IMPACT_WARNING_THRESHOLD = 5.0; // PULL UP warning: time to impact in seconds (match KSP mod)
+const float HIGH_GEE_WARNING_SOLID_THRESHOLD = 4.5; // 4.5G (slow beeping)
+const float HIGH_GEE_WARNING_BLINKING_THRESHOLD = 6.5; // 6.5G (fast beeping)
+const byte HIGH_TEMP_WARNING_SOLID_THRESHOLD = 60; // 60%
+const byte HIGH_TEMP_WARNING_BLINKING_THRESHOLD = 80; // 80%
+const float GEAR_SPEED_WARNING_THRESHOLD = 100.0; // 100 m/s
+const float OVERSPEED_THRESHOLD = 900.0; // 900 m/s
+const float OVERSPEED_ALTITUDE_THRESHOLD = 15000.0; // 15 km
 
 // Joystick configs
-
-// Multiplier for percision mode
-float PERCISION_MODIFIER = 0.125;
-// Define smoothing factor
 const float JOYSTICK_SMOOTHING_FACTOR = 0.2;  // Adjust this value for more or less smoothing (For Rot and Trans)
-// Center deadzone (raw value range around center that maps to zero)
-const int JOYSTICK_DEADZONE = 75;  // Deadzone range (±50 from center = 512)
+const int JOYSTICK_DEADZONE = 90;  // Deadzone range (within 90 from center = 512)
+const int JOYSTICK_DEADZONE_CENTER = 90;  // Snap centering
+const int CAMERA_DEADZONE = 150; // Deadzone for camera joystick
+
+// Throttle configs
+const int MIN_THROTTLE_POS = 75;    // Minimum throttle position 0
+const int MAX_THROTTLE_POS = 765;   // Maximum throttle position 1023
+const int THROTTLE_DEADZONE = 50;   // Deadzone at min and max
+
+// Precision mode
+const float DEFAULT_PRECISION_MODIFIER = 0.3;
+const float MIN_PRECISION_MODIFIER = 0.1;  // Minimum 10%
+const float MAX_PRECISION_MODIFIER = 1.0;  // Maximum 100%
+const float PRECISION_STEP = 0.1;          // Increment/decrement by 10%
+
+// Autopilot tuning constants
+const float AP_HEADING_K = 0.02;  // proportional gain for heading -> yaw input (deg -> fraction)
+const float AP_SPEED_K = 0.08;   // proportional gain for speed -> throttle fraction per m/s
+const float AP_THROTTLE_ADAPT_RATE = 0.005; // rate at which base throttle adapts to find equilibrium
+const float AP_ROLL_K = 0.0035;    // proportional gain for roll -> roll input (deg -> fraction)
+const float THROTTLE_SMOOTH_ALPHA = 0.8; // smoothing alpha for throttle changes (0..1)
+const float MIN_THROTTLE_FRACTION = 0.0; // allow throttle to go to zero when slowing down
+const float AUTOPILOT_ALT_PRIORITY_THRESHOLD = 5.0; // meters: if altitude error is larger, deprioritize speed matching
+const float AUTOPILOT_HEADING_PRIORITY_THRESHOLD = 2.0; // degrees: if heading error is larger, deprioritize speed matching
+
+// Roll sensitivity
+const float ROLL_SENSITIVITY = 0.35;
+
+// Serial baud rate
+const unsigned long SERIAL_BAUD_RATE = 115200;
 
 /////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////
 
 speedMode currentSpeedMode;
-bool translationHold = false;
-bool rotationHold = false;
+speedMode navballSpeedMode = SPEED_SURFACE_MODE;
 
-// Stored values for hold functionality
-int16_t heldTransX = 0;
-int16_t heldTransY = 0;
-int16_t heldTransZ = 0;
-int16_t heldRotX = 0;
-int16_t heldRotY = 0;
-int16_t heldRotZ = 0;
-
-// For hz
-int previousMillis;
-
+// State variables
+float precisionModifier = DEFAULT_PRECISION_MODIFIER;
+bool lastGrabButtonState = false;
+bool lastBoardButtonState = false;
 bool isDebugMode = true;
 bool isConnectedToKSP = false;
-
-Timer timer;
+bool useImperialUnits = false;  // Global flag for imperial/metric units
 int loopCount = 0;
+int previousMillis;  // For hz calculation
 
-Timer lcdTimer;  // Timer for LCD updates
-Timer twoSecondTimer;
+// Autopilot state (repurposed from physical warp switch)
+bool autopilotEnabled = false;
+float autopilotHeading = 0.0f;
+float autopilotSpeed = 0.0f;
+float autopilotAltitude = 0.0f;
+unsigned long autopilotEngageTime = 0;
+bool sasWasOnBeforeAutopilot = false;  // Track SAS state to restore after autopilot
+bool viewModeEnabled = false;  // Toggle state for translation button view mode
+
+// Trim offsets (added to joystick input)
+int16_t trimTransX = 0;
+int16_t trimTransY = 0;
+int16_t trimTransZ = 0;
+int16_t trimRotX = 0;
+int16_t trimRotY = 0;  // No default pitch trim
+int16_t trimRotZ = 0;
+
+// Camera control
+unsigned long lastCameraUpdate = 0;
 
 // Debug flags for resource messages
 bool lfReceived = false;
@@ -189,29 +312,55 @@ bool sfReceived = false;
 bool mpReceived = false;
 bool ecReceived = false;
 
+// Timers
+Timer timer;
+Timer lcdTimer;
+Timer twoSecondTimer;
+Timer throttleDebugTimer;
+Timer manualRefreshTimer;
+
+
+
 /////////////////////////////////////////////////////////////////
 ////////////////////////// Functions ////////////////////////////
 /////////////////////////////////////////////////////////////////
 
 void setup()
 {
+     
     loopCount = 0;
-    timer.start(1000);
-    lcdTimer.start(250);  // LCD updates every 250ms
-    twoSecondTimer.start(2000);
-    
+    timer.start(MAIN_LOOP_INTERVAL);
+    lcdTimer.start(LCD_UPDATE_INTERVAL);
+    twoSecondTimer.start(TWO_SECOND_INTERVAL);
+    throttleDebugTimer.start(THROTTLE_DEBUG_INTERVAL);
+    manualRefreshTimer.start(MANUAL_REFRESH_INTERVAL);
     // Open up the serial port
-    Serial.begin(115200);
+    Serial.begin(SERIAL_BAUD_RATE);
     // Init I/O
     initIO();
+
+    // Show initializing messages on the LCDs during startup
+    // Show the same initializing message on all LCDs
+    Output.setSpeedLCD("Initializing", "Waiting...");
+    Output.setAltitudeLCD("Initializing", "Waiting...");
+    Output.setHeadingLCD("Initializing", "Waiting...");
+    Output.setInfoLCD("Initializing", "Waiting...");
+    Output.setDirectionLCD("Initializing", "Waiting...");
+    Output.update();
 	
+    // Test beep on startup
+    beepSound.setSound(1000, true);
+    beepSound.updateBeep();
+    delay(STARTUP_BEEP_DELAY);
+    beepSound.setSound(0, false);
+    beepSound.updateBeep();
+
     Output.setLED(POWER_LED, true);
     while (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
     {
         preKSPConnectionLoop();
     }
     Output.setLED(POWER_LED, true);
-	
 	printDebug("Starting Simpit");
 	setAllOutputs(true);
     ///// Initialize Simpit
@@ -231,29 +380,22 @@ void setup()
 void loop() 
 {
     loopCount++;
-    // If vessel  change, 
-    //if (vesselSwitched)
-        //waitForInputEnable();
-
     // Update input from controller (Refresh inputs)
-    //int inputStart = millis();
     Input.update();
-    //int inputDelay = millis() - inputStart;
-
-
-    uint32_t simpitStart = millis();
     // Update simpit (receive messages from KSP including CAG status)
     mySimpit.update();
-    uint32_t simpitDelay = millis() - simpitStart;
-
-    // Refresh inputs (this sets LED states based on KSP data)
+    // This ensures LEDs stay in sync even if a message is missed
+    if (manualRefreshTimer.check() && isConnectedToKSP)
+    {
+        mySimpit.requestMessageOnChannel(ACTIONSTATUS_MESSAGE);
+        mySimpit.requestMessageOnChannel(CAGSTATUS_MESSAGE);
+        mySimpit.requestMessageOnChannel(SAS_MODE_INFO_MESSAGE);
+        mySimpit.requestMessageOnChannel(SOI_MESSAGE);
+    }
+    // Refresh logic, I/O, etc. This is all local to KSPArduino.ino
     refresh();
-
-    uint32_t outputStart = millis();
     // Update output to controller (send LED states to hardware)
     Output.update();
-    uint32_t outputDelay = millis() - outputStart;
-    
 } 
 
 
@@ -285,78 +427,51 @@ void initIO()
 
 void setAllOutputs(bool state)
 {
-	
 	for (int i = 0; i <= TOTAL_LEDS; i++)
 	{
 		Output.setLED(i, state);
 	}
 }
 
-// Minimal loop rate tracker (prints every 3 seconds)
-static unsigned long __hz_lastPrintMs = 0;
-static unsigned long __hz_loopCount = 0;
-
-
-void debugAllOutputs()
-{
-    printDebug("\n=== OUTPUT DEBUG MODE ===");
-    printDebug("This will test each LED one at a time.");
-    printDebug("Press STAGE BUTTON to advance to next LED.");
-    printDebug("Starting in 3 seconds...\n");
-    delay(3000);
-    
-    // Test each LED from 0 to TOTAL_LEDS
-    for (int ledNum = 0; ledNum <= TOTAL_LEDS; ledNum++)
-    {
-        // Turn off all LEDs
-        setAllOutputs(false);
-        
-        // Turn on current LED
-        Output.setLED(ledNum, true);
-        Output.update();
-        
-        // Print info
-        printDebug("LED " + String(ledNum) + " is ON");
-        printDebug("Press STAGE BUTTON to continue...");
-        
-        // Wait for stage button press
-        bool buttonPressed = false;
-        while (!buttonPressed)
-        {
-            Input.update();
-            if (Input.getVirtualPin(VPIN_STAGE_BUTTON, false) == ON)
-            {
-                buttonPressed = true;
-                // Wait for button release
-                delay(200);
-            }
-        }
-    }
-    
-    // All done
-    setAllOutputs(false);
-    Output.update();
-    printDebug("\n=== OUTPUT DEBUG COMPLETE ===");
-    printDebug("All LEDs tested. Returning to normal mode.\n");
-    delay(2000);
-}
-
 void preKSPConnectionLoop()
 {
     uint32_t timeStart = millis();
-    __hz_loopCount++;
-    Input.update();
-    /////////////////////////////////////////////////////
-	// outputs
-    while (Input.getVirtualPin(VPIN_PRECISION_SWITCH, false) == ON)
-    {
 
-        //Test analog
-        refreshRotation();
-        refreshTranslation();
-        refreshThrottle();
-    }
+    //////////////////////////////////////////////////////
     
+    Input.update();
+    // Debug mode: allow LED testing via serial input
+    if (Input.getVirtualPin(VPIN_MOD_BUTTON, false) == ON)
+    {
+        while (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
+        {
+            serialLedTestDebug();
+            Input.update();
+        }
+    }
+    setAllOutputs(millis() % 1000 < 500);  // Blink all LEDs at 1Hz
+    
+    // Test all inputs, print when any button is pressed
+    for (int i = 0; i < 102; i++)
+    {
+        auto state = Input.getVirtualPin(i);
+        if (state == ON)
+        {
+            printDebug("Input " + String(i) + " pressed");
+        }
+    }
+
+    /////////////////////////////////////////////////////
+
+    uint32_t loopDelay = millis() - timeStart;
+    if (twoSecondTimer.check())
+    {
+        printDebug("\nLoop Rate: " + String(loopDelay));
+        printDebug(" ms\n------------END OF LOOP---------------");
+    }
+}
+void serialLedTestDebug()
+{
     // Allow user to serial input pin number and enable that and disable all others
 	printDebug("\nEnter pin number to enable (0-145):");
     // Clear any leftover data in serial buffer
@@ -385,37 +500,42 @@ void preKSPConnectionLoop()
     {
         printDebug("Invalid pin number.");
     }
-    // Test all inputs - print when any button is pressed
-    for (int i = 0; i < 102; i++)
-    {
-        auto state = Input.getVirtualPin(i);
-        if (state == ON)
-        {
-            printDebug("Input " + String(i) + " pressed");
-        }
-    }
-    
-
-    /////////////////////////////////////////////////////
-    uint32_t loopDelay = millis() - timeStart;
-    if (twoSecondTimer.check())
-    {
-        printDebug("\nLoop Rate: " + String(loopDelay));
-        printDebug(" ms\n------------END OF LOOP--------------");
-    }
 }
+
 void initSimpit()
 {
     //Output.setSpeedLCD("Waiting for KSP", "");
     Output.update();
     // Wait for a connection to ksp
-    while (!mySimpit.init()) delay(100);
+    // Show waiting message and keep LCDs updated while waiting
+    // Show same waiting message on all LCDs and keep them updated while waiting
+    Output.setSpeedLCD("Waiting for Simpit", "");
+    Output.setAltitudeLCD("Waiting for Simpit", "");
+    Output.setHeadingLCD("Waiting for Simpit", "");
+    Output.setInfoLCD("Waiting for Simpit", "");
+    Output.setDirectionLCD("Waiting for Simpit", "");
+    Output.update();
+    while (!mySimpit.init()) {
+        delay(100);
+        Output.update();
+    }
+    while (!mySimpit.init()) {
+        delay(100);
+        Output.update();
+    }
     
     // Set connection flag
     isConnectedToKSP = true;
     
     // Show that the controller has connected
     printDebug("KSP Controller Connected!");
+    // Update all LCDs to show successful connection
+    Output.setSpeedLCD("Connected to KSP", "");
+    Output.setAltitudeLCD("Connected to KSP", "");
+    Output.setHeadingLCD("Connected to KSP", "");
+    Output.setInfoLCD("Connected to KSP", "");
+    Output.setDirectionLCD("Connected to KSP", "");
+    Output.update();
     // Register a method for receiving simpit message from ksp
     mySimpit.inboundHandler(myCallbackHandler);
     // Register the simpit channels
@@ -436,140 +556,242 @@ void printHz(String customTxt)
     // Update the previous timestamp for the next iteration
     previousMillis = currentMillis;
 }
-void waitForInputEnable()
+
+void vesselChange()
 {
+	// Request important states
+    mySimpit.requestMessageOnChannel(ACTIONSTATUS_MESSAGE);
+    mySimpit.requestMessageOnChannel(CAGSTATUS_MESSAGE);
+    mySimpit.requestMessageOnChannel(SAS_MODE_INFO_MESSAGE);
+	// Update everything else
+	mySimpit.update();
 
-    //Things to check
-    //All input state that are toggled
-    /*
+    // Force-refresh CAG and action-group LED state so the controller reflects the
+    // new vessel's action availability immediately.
+    refreshCAGs();
+    setActionGroupLEDs();
+    setSASModeLEDs();
+
+    //delay(2000); // Wait a moment to ensure messages are received
+    //keyboardEmulatorMessage pauseMessage(0x1B); // ESC key
+    //mySimpit.send(KEYBOARD_EMULATOR, pauseMessage); // ESC key
+    mySimpit.printToKSP("Vessel change detected!", PRINT_TO_SCREEN);
+
+    // Print to KSP screen
+    mySimpit.printToKSP("Input deactivated!", PRINT_TO_SCREEN);
+	
+	// Blocking calls that must be met before controller continues
+	// SAS	
+	waitForUserCorrection(VPIN_SAS_SWITCH, (ag.isSAS) ? ON : OFF, "SAS");
+	// RCS
+	waitForUserCorrection(VPIN_RCS_SWITCH, (ag.isRCS) ? ON : OFF, "RCS");
+	// Locks should be off
+	//waitForUserCorrection(VPIN_THROTTLE_LOCK_SWITCH, OFF, "Throttle Lock");
+	//waitForUserCorrection(VPIN_STAGE_LOCK_SWITCH, OFF, "Stage Lock");
+	//waitForUserCorrection(VPIN_ABORT_LOCK_SWITCH, OFF, "Abort Lock");
+	//waitForUserCorrection(VPIN_WARP_LOCK_SWITCH, OFF, "Warp Lock");
+	// Toggle actions
+	// Gear
+	waitForUserCorrection(VPIN_GEAR_SWITCH, (!ag.isGear) ? ON : OFF, "Gear");
+	// Lights
+	waitForUserCorrection(VPIN_LIGHTS_SWITCH, (ag.isLights) ? ON : OFF, "Lights");
+	// Brake
+	waitForUserCorrection(VPIN_BRAKE_SWITCH, (ag.isBrake) ? ON : OFF, "Brake");
+	// Other values that should be off
+	//waitForUserCorrection(VPIN_PRECISION_SWITCH, OFF, "Precision");
+	waitForUserCorrection(VPIN_DOCKING_SWITCH, OFF, "Docking");
+    // UI
+    waitForUserCorrection(VPIN_DUAL_SWITCH, OFF, "Dual/Single");
+    // Nav
+    waitForUserCorrection(VPIN_NAV_SWITCH, OFF, "NAV/FLI");
+    // View
+    waitForUserCorrection(VPIN_VIEW_SWITCH, OFF, "IVA/EXT");
+    // Physical Warp
+    waitForUserCorrection(VPIN_AUTO_PILOT_SWITCH, OFF, "Autopilot");
+    // 
 
 
-    SAS
-    RCS
-    Phys warp
-    Warp lock
-    Nav
-    View
-    Throttle Lock
-    
-    Optional:
-    Throttle Position
+    mySimpit.printToKSP("Inputs all set.", PRINT_TO_SCREEN);
+    // Print to KSP screen
+    mySimpit.printToKSP("Input reactivated!", PRINT_TO_SCREEN);
+    keyboardEmulatorMessage pauseMsg(0x1B); // ESC key
+    mySimpit.send(KEYBOARD_EMULATOR, pauseMsg);
+}
 
-
-    */
-
-
-    
-    
-
-
-
-
-    
-
-    // Deavtivate controller
-    printDebug("Input deactivated!");
-    Input.setAllVPinsReady();
-
-    printDebug("Please reset controller to correct state, then press the Input Enable Button.");
-    // Wait for user to reset controller to default and then press Input enable button
-    while (true)
-    {
-        if (checkInput(Input.getVirtualPin(VPIN_GEAR_SWITCH, false), ag.isGear, "OFF", "ON", "Gear Switch") &&
-        		checkInput(Input.getVirtualPin(VPIN_LIGHTS_SWITCH, false), ag.isLights, "OFF", "ON", "Lights Switch") &&
-            	checkInput(Input.getVirtualPin(VPIN_BRAKE_SWITCH, false), ag.isBrake, "OFF", "ON", "Brake"))
-            break;
-        else
+void waitForUserCorrection(byte input, bool desiredState, String switchName)
+{
+    Timer waitTimer;
+    waitTimer.start(250);
+    String stateText = (desiredState == ON) ? "ON" : "OFF";
+    String message = "Set " + switchName + " to " + stateText;
+    bool shouldPrintSetMessage = false;
+	while (Input.getVirtualPin(input, false) != desiredState)
+	{
+        if (waitTimer.check())
         {
-            waitForInputEnable();
-            return;
+            mySimpit.printToKSP(message, PRINT_TO_SCREEN);
+        }
+		delay(50);
+		Input.update();
+        mySimpit.update();  // Process incoming messages to update LEDs
+        Output.update();    // Update LED outputs
+        
+        // Update warning LEDs while waiting
+        setCommsWarning();
+        setAltWarning();
+        setPitchWarning();
+        setActionGroupLEDs();
+        // Keep audible warnings updated while waiting
+        updateWarningSound();
+
+        // enable sound, ui, pause
+        refreshSoundSwitch();
+        refreshUI();
+        refreshPause();
+
+        if (!shouldPrintSetMessage)
+        {
+            shouldPrintSetMessage = true;
         }
     }
-    printDebug("Input activated!");
-}
-bool checkInput(ButtonState current, bool correct, String disabled, String enabled, String name)
-{
-    if (current == NOT_READY)
+    if (shouldPrintSetMessage)
     {
-        return false;
-    }
-    
-    bool currentBool = (current == ON);
-    
-    if ((currentBool && correct) || (!currentBool && !correct))
-    {
-        printDebug("GOOD: " + name + " is set correctly.");
-        return true;
-    }
-    else
-    {
-        String pos = currentBool ? disabled : enabled;
-        printDebug("BAD: Please update the " + name + " to the " + pos + " position.");
-        return false;
+        mySimpit.printToKSP(switchName + " set.", PRINT_TO_SCREEN);
     }
 }
 void refresh()
 {
-    refreshStage();
-    refreshAbort();
-    refreshLights();
-    refreshGear();
-    refreshBrake();
-    refreshDocking();
-    refreshSAS();
-    refreshRCS();
-    refreshAllSASModes();
-    refreshCAGs();
+    // Check flight status to determine which controls are active
+    bool inFlight = flightStatusMsg.isInFlight();
+    bool inEVA = flightStatusMsg.isInEVA();
     
-
-    updateReferenceMode();
-
-    // Update resource LEDs
-    setSFLEDs();
-    setLFLEDs();
-    setOXLEDs();
-    setMPLEDs();
-    setECLEDs();
-
-    // Update warning LEDs
-    setTempWarning();
-    setGeeWarning();
-    setWarpWarning();
-    setCommsWarning();
-    setAltWarning();
-    setPitchWarning();
-
+    // Controls that work in both flight and EVA
+    refreshWarp();
+    refreshAP();
+    refreshMod();
+    refreshPause();
     refreshCamReset();
     refreshCamMode();
     refreshFocus();
     refreshView();
     refreshNav();
     refreshUI();
-    refreshScreenshot();
-
-    refreshWarp();
-    refreshPause();
-
-    refreshThrottle();
-    refreshTranslation();
-    refreshRotation();
-
-    updateDirectionMode();
-    updateInfoMode();
-
-    // Update LCDs on timer (every 250ms) to avoid freezing
-    if (lcdTimer.check())
+    // Toggle sound in KSP when sound switch changed
+    refreshSoundSwitch();
+    
+    // Flight-only controls (not EVA)
+    if (inFlight && !inEVA)
     {
-        setSpeedLCD();
-        setAltitudeLCD();
-        setHeadingLCD();
-        setInfoLCD();
-        setDirectionLCD();
+        refreshStage();
+        refreshAbort();
+        refreshLights();
+        refreshGear();
+        refreshBrake();
+        refreshDocking();
+        refreshSAS();
+        refreshRCS();
+        refreshAllSASModes();
+        refreshCAGs();
+        
+        refreshThrottle();
+        refreshTranslation();
+        refreshRotation();
+        
+        // Update resource LEDs
+        setSFLEDs();
+        setLFLEDs();
+        setOXLEDs();
+        setECLEDs();
+        
+        // Update warning LEDs
+        setTempWarning();
+        setGeeWarning();
+        setGearWarning();
+        setWarpWarning();
+        setCommsWarning();
+        setAltWarning();
+        setPitchWarning();
+        
+        refreshWarningButtons();// Numpad 0-9
+
+        refreshRotationButton();
+        
+
+        // Update audible warning based on above LED conditions
+        updateWarningSound();
+        
+        // Update action group status LEDs (sync with game state)
+        setActionGroupLEDs();
+    }
+    
+    // EVA-only controls
+    if (inEVA)
+    {
+        refreshJump();
+
+        
+        // EVA uses RCS translation controls for movement
+        refreshTranslation();
+        refreshRotation();
+        
+        // Show EVA monopropellant
+        setMPLEDs();
+    }
+    
+    // Update displays for both flight and EVA
+    if (inFlight)  // In flight or EVA
+    {
+        updateReferenceMode();
+        updateDirectionMode();
+        updateInfoMode();
+        
+        // Update action group LEDs (always keep in sync with game state)
+        setActionGroupLEDs();
+        setSASModeLEDs();
+        
+        // Update LCDs on timer (every 250ms) to avoid freezing
+        if (lcdTimer.check())
+        {
+            setSpeedLCD();
+            setAltitudeLCD();
+            setHeadingLCD();
+            setInfoLCD();
+            setDirectionLCD();
+        }
+
+        refreshGrab();  // EVA grab (F key)
+        refreshBoard(); // EVA board (B key)
+    }
+}
+
+// Choose and play a prioritized warning sound based on current telemetry
+void updateWarningSound()
+{
+    // Sound disabled for GEE, ALT (TERRAIN), and PITCH (PULL UP) warnings
+    // Only LEDs are used for these warnings
+    
+    // Other warnings still use sound
+    bool tempBlink = (tempLimitMsg.tempLimitPercentage >= HIGH_TEMP_WARNING_BLINKING_THRESHOLD);
+    bool tempSolid = (tempLimitMsg.tempLimitPercentage >= HIGH_TEMP_WARNING_SOLID_THRESHOLD);
+    bool commsLow = (flightStatusMsg.commNetSignalStrenghPercentage < COMMS_WARNING_THRESHOLD);
+
+    // Priority: TEMP, COMMS
+    if (tempBlink || tempSolid)
+    {
+        beepSound.beep(PATTERN_TEMP, sizeof(PATTERN_TEMP) / sizeof(int), true, 500);
+    }
+    else if (commsLow)
+    {
+        beepSound.beep(PATTERN_COMMS, sizeof(PATTERN_COMMS) / sizeof(int), true, 800);
+    }
+    else
+    {
+        // No warnings - stop beeping
+        beepSound.beep(nullptr, 0, false, 0);
     }
 }
 
 
-#pragma region Ksp Simpit
 
 /// <summary>Info from ksp.</summary>
 void myCallbackHandler(byte messageType, byte msg[], byte msgSize)
@@ -822,11 +1044,17 @@ void myCallbackHandler(byte messageType, byte msg[], byte msgSize)
             targetMsg = parseTarget(msg);
         }
         break;
-    case SOI_MESSAGE: // WIP
-        soi = (char*)msg;
-        //soi[msgSize] = '\0'; 
-        soi[soi.length()] = '\0';
-        printDebug("SOI:'" + soi + "'");
+    case SOI_MESSAGE:
+        // SOI strings are null-terminated from KSP
+        // Build string from msg up to the null terminator or msgSize
+        {
+            String s = "";
+            for (int i = 0; i < msgSize; i++) {
+                if (msg[i] == 0) break;
+                s += (char)msg[i];
+            }
+            soi = s;
+        }
         break;
     case SCENE_CHANGE_MESSAGE:
 
@@ -835,6 +1063,26 @@ void myCallbackHandler(byte messageType, byte msg[], byte msgSize)
         if (msgSize == sizeof(flightStatusMessage))
         {
             flightStatusMsg = parseFlightStatusMessage(msg);
+            
+            // Detect vessel change (including initial vessel load)
+            bool isFirstLoad = (lastVesselType == 255 && lastCrewCount == 255);
+            bool vesselTypeChanged = (lastVesselType != 255 && flightStatusMsg.vesselType != lastVesselType);
+            bool crewCountChanged = (lastCrewCount != 255 && flightStatusMsg.crewCount != lastCrewCount);
+            
+            // Trigger vessel change on: initial load OR vessel type/crew changed
+            // Only trigger if connected and in flight
+            if (isConnectedToKSP && flightStatusMsg.isInFlight() && 
+                (isFirstLoad || vesselTypeChanged || crewCountChanged))
+            {
+                // Vessel changed! Pause the game
+                mySimpit.update();
+                vesselChange();
+            }
+            
+            // Update last known vessel properties
+            lastVesselStage = flightStatusMsg.currentStage;
+            lastVesselType = flightStatusMsg.vesselType;
+            lastCrewCount = flightStatusMsg.crewCount;
         }
         break;
     case ATMO_CONDITIONS_MESSAGE:
@@ -895,8 +1143,27 @@ void registerSimpitChannels()
     
 }
 
-#pragma endregion
-
+void refreshMod()
+{
+    // Track button state to send press/release as modifier key (Right Shift)
+    static bool lastEnableState = false;
+    bool currentEnableState = (Input.getVirtualPin(VPIN_MOD_BUTTON, false) == ON);
+    
+    if (currentEnableState && !lastEnableState) // Button just pressed
+    {
+        printDebug("Mod pressed - Right Shift down");
+        keyboardEmulatorMessage msgPress(0xA1, 1);  // Right Shift key - press
+        mySimpit.send(KEYBOARD_EMULATOR, msgPress);
+    }
+    else if (!currentEnableState && lastEnableState) // Button just released
+    {
+        printDebug("Mod released - Right Shift up");
+        keyboardEmulatorMessage msgRelease(0xA1, 2);  // Right Shift key - release
+        mySimpit.send(KEYBOARD_EMULATOR, msgRelease);
+    }
+    
+    lastEnableState = currentEnableState;
+}
 
 void updateDirectionMode()
 {
@@ -943,63 +1210,111 @@ void updateInfoMode()
 void updateReferenceMode()
 {
     if (Input.getVirtualPin(VPIN_REFERENCE_MODE_BUTTON) == ON)
+    {
         mySimpit.cycleNavBallMode();
+        
+        // Cycle through Surface -> Orbit -> Target
+        switch (navballSpeedMode)
+        {
+        case SPEED_SURFACE_MODE:
+            navballSpeedMode = SPEED_ORBIT_MODE;
+            break;
+        case SPEED_ORBIT_MODE:
+            navballSpeedMode = SPEED_TARGET_MODE;
+            break;
+        case SPEED_TARGET_MODE:
+            navballSpeedMode = SPEED_SURFACE_MODE;
+            break;
+        default:
+            navballSpeedMode = SPEED_SURFACE_MODE;
+            break;
+        }
+    }
+    
+    // Repurpose vertical velocity switch: ON = imperial, OFF = metric
+    useImperialUnits = (Input.getVirtualPin(VPIN_VERTICAL_VELOCITY_SWITCH, false) == ON);
+    currentSpeedMode = navballSpeedMode;
 }
 
-void refeshPitchWarningCancel()
+void refreshWarningButtons()
 {
-    if (Input.getVirtualPin(VPIN_PITCH_WARNING_BUTTON) == ON) {}
-}
-
-void refreshAltWarningCancel()
-{
-    if (Input.getVirtualPin(VPIN_ALT_WARNING_BUTTON) == ON) {}
-}
-
-void refreshCommsWarningCancel()
-{
-    if (Input.getVirtualPin(VPIN_COMMS_WARNING_BUTTON) == ON) {}
-}
-
-void refreshGearWarningCancel()
-{
-    if (Input.getVirtualPin(VPIN_GEAR_WARNING_BUTTON) == ON) {}
-}
-
-void refreshRCSWarningCancel()
-{
-    if (Input.getVirtualPin(VPIN_RCS_WARNING_BUTTON) == ON) {}
-}
-
-void refreshSASWarningCancel()
-{
-    if (Input.getVirtualPin(VPIN_SAS_WARNING_BUTTON) == ON) {}
-}
-
-void refreshBrakeWarningCancel()
-{
-    if (Input.getVirtualPin(VPIN_BRAKE_WARNING_BUTTON) == ON) {}
-}
-
-void refreshWarpWarningCancel()
-{
-    if (Input.getVirtualPin(VPIN_WARP_WARNING_BUTTON) == ON) {}
-}
-
-void refreshGeeWarningCancel()
-{
-    if (Input.getVirtualPin(VPIN_GEE_WARNING_BUTTON) == ON) {}
-}
-
-void refreshTempWarningCancel()
-{
-    if (Input.getVirtualPin(VPIN_TEMP_WARNING_BUTTON) == ON) {}
+    if (Input.getVirtualPin(VPIN_PITCH_WARNING_BUTTON) == ON)
+    {
+        printDebug("PITCH warning cancel - Numpad 9");
+        keyboardEmulatorMessage msg(0x69);  // Numpad 9
+        mySimpit.send(KEYBOARD_EMULATOR, msg);
+    }
+    if (Input.getVirtualPin(VPIN_ALT_WARNING_BUTTON) == ON)
+    {
+        printDebug("ALT warning cancel - Numpad 8");
+        keyboardEmulatorMessage msg(0x68); // Numpad 8
+        mySimpit.send(KEYBOARD_EMULATOR, msg);
+    }
+    if (Input.getVirtualPin(VPIN_COMMS_WARNING_BUTTON) == ON)
+    {
+        printDebug("COMMS warning cancel - Numpad 7");
+        keyboardEmulatorMessage msg(0x67); // Numpad 7
+        mySimpit.send(KEYBOARD_EMULATOR, msg);
+    }
+    if (Input.getVirtualPin(VPIN_GEAR_WARNING_BUTTON) == ON)
+    {
+        printDebug("GEAR warning cancel - Numpad 6");
+        keyboardEmulatorMessage msg(0x66);  // Numpad 6
+        mySimpit.send(KEYBOARD_EMULATOR, msg);
+    }
+    if (Input.getVirtualPin(VPIN_RCS_WARNING_BUTTON) == ON)
+    {
+        printDebug("RCS warning cancel - Numpad 5");
+        keyboardEmulatorMessage msg(0x65);  // Numpad 5
+        mySimpit.send(KEYBOARD_EMULATOR, msg);
+    }
+    if (Input.getVirtualPin(VPIN_SAS_WARNING_BUTTON) == ON)
+    {
+        printDebug("SAS warning cancel - Numpad 4");
+        keyboardEmulatorMessage msg(0x64);  // Numpad 4
+        mySimpit.send(KEYBOARD_EMULATOR, msg);
+    }
+    if (Input.getVirtualPin(VPIN_BRAKE_WARNING_BUTTON) == ON)
+    {
+        printDebug("BRAKE warning cancel - Numpad 3");
+        keyboardEmulatorMessage msg(0x63);  // Numpad 3
+        mySimpit.send(KEYBOARD_EMULATOR, msg);
+    }
+    if (Input.getVirtualPin(VPIN_WARP_WARNING_BUTTON) == ON)
+    {
+        printDebug("WARP warning cancel - Numpad 2");
+        keyboardEmulatorMessage msg(0x62);  // Numpad 2
+        mySimpit.send(KEYBOARD_EMULATOR, msg);
+    }
+    if (Input.getVirtualPin(VPIN_GEE_WARNING_BUTTON) == ON)
+    {
+        printDebug("GEE warning cancel - Numpad 1");
+        keyboardEmulatorMessage msg(0x61);  // Numpad 1
+        mySimpit.send(KEYBOARD_EMULATOR, msg);
+    }
+    if (Input.getVirtualPin(VPIN_TEMP_WARNING_BUTTON) == ON)
+    {
+        printDebug("TEMP warning cancel - Numpad 0");
+        keyboardEmulatorMessage msg(0x60);  // Numpad 0
+        mySimpit.send(KEYBOARD_EMULATOR, msg);
+    }
 }
 
 void setTempWarning()
 {
-    if (tempLimitMsg.tempLimitPercentage > HIGH_TEMP_WARNING_SOLID_THRESHOLD)
+    // Check for overspeed condition too
+    float surfaceSpeed = velocityMsg.surface;
+    float radarAlt = altitudeMsg.surface;
+    bool isOverspeed = (surfaceSpeed > OVERSPEED_THRESHOLD && radarAlt < OVERSPEED_ALTITUDE_THRESHOLD);
+    
+    if (tempLimitMsg.tempLimitPercentage >= HIGH_TEMP_WARNING_BLINKING_THRESHOLD || isOverspeed)
     {
+        // Blinking for extreme temperature or overspeed
+        Output.setLED(TEMP_WARNING_LED, (millis() / TEMP_WARNING_BLINK_INTERVAL) % 2);
+    }
+    else if (tempLimitMsg.tempLimitPercentage >= HIGH_TEMP_WARNING_SOLID_THRESHOLD)
+    {
+        // Solid for high temperature
         Output.setLED(TEMP_WARNING_LED, true);
     }
     else
@@ -1007,84 +1322,54 @@ void setTempWarning()
         Output.setLED(TEMP_WARNING_LED, false);
     }
 }
-
 void setGeeWarning()
 {
-    // Get G-force from airspeed message (in Gs)
     float gforce = airspeedMsg.gForces;
-    
-    if (gforce >= HIGH_GEE_WARNING_BLINKING_THRESHOLD)
-    {
-        // Blinking for extreme G-force
-        Output.setLED(GEE_WARNING_LED, (millis() / 250) % 2);  // Blink every 250ms
-    }
-    else if (gforce >= HIGH_GEE_WARNING_SOLID_THRESHOLD)
-    {
-        // Solid ON for high G-force
-        Output.setLED(GEE_WARNING_LED, true);
-    }
-    else
-    {
-        Output.setLED(GEE_WARNING_LED, false);
-    }
+    Output.setLED(GEE_WARNING_LED, gforce >= HIGH_GEE_WARNING_BLINKING_THRESHOLD ? (millis() / GEE_WARNING_BLINK_INTERVAL) % 2 : 
+                                   gforce >= HIGH_GEE_WARNING_SOLID_THRESHOLD);
 }
-
+void setGearWarning()
+{
+    float surfaceSpeed = velocityMsg.surface;
+    Output.setLED(GEAR_WARNING_LED, !ag.isGear ? false :
+                                    surfaceSpeed > GEAR_SPEED_WARNING_THRESHOLD ? (millis() / GEAR_WARNING_BLINK_INTERVAL) % 2 : true);
+}
 void setWarpWarning()
 {
-    if (flightStatusMsg.currentTWIndex > 1)
-    {
-        Output.setLED(WARP_WARNING_LED, true);
-    }
-    else
-    {
-        Output.setLED(WARP_WARNING_LED, false);
-    }
+    Output.setLED(WARP_WARNING_LED, flightStatusMsg.currentTWIndex > 1);
 }
-
 void setCommsWarning()
 {
-    if (flightStatusMsg.commNetSignalStrenghPercentage < COMMS_WARNING_THRESHOLD)
-    {
-        Output.setLED(COMMS_WARNING_LED, true);
-    }
-    else
-    {
-        Output.setLED(COMMS_WARNING_LED, false);
-    }
+    Output.setLED(COMMS_WARNING_LED, flightStatusMsg.commNetSignalStrenghPercentage < COMMS_WARNING_THRESHOLD);
 }
-
 void setAltWarning()
 {
-    if (altitudeMsg.surface < LOW_ALTITUDE_WARNING_THRESHOLD)
-    {
-        Output.setLED(ALT_WARNING_LED, true);
-    }
-    else
-    {
-        Output.setLED(ALT_WARNING_LED, false);
-    }
+    float surfaceAlt = max(0.0f, altitudeMsg.surface);
+    Output.setLED(ALT_WARNING_LED, !ag.isGear && surfaceAlt > 0.0f && surfaceAlt < LOW_ALTITUDE_WARNING_THRESHOLD);
 }
-
 void setPitchWarning()
 {
-    // Get pitch angle in degrees
-    float pitch = vesselPointingMsg.pitch;
-
-    if (pitch < -25)
-    {
-        // Blinking for steep pitch
-        Output.setLED(PITCH_WARNING_LED, (millis() / 250) % 2);
-    }
-    else
+    float verticalSpeed = velocityMsg.vertical;
+    float surfaceAlt = max(0.0f, altitudeMsg.surface);
+    
+    if (verticalSpeed >= 0 || ag.isGear || surfaceAlt <= 0.0f)
     {
         Output.setLED(PITCH_WARNING_LED, false);
+        return;
     }
+
+    float timeToImpact = surfaceAlt / -verticalSpeed;
+    Output.setLED(PITCH_WARNING_LED, timeToImpact < TIME_TO_IMPACT_WARNING_THRESHOLD ? (millis() / PITCH_WARNING_BLINK_INTERVAL) % 2 : false);
+}
+void setActionGroupLEDs()
+{
+    Output.setLED(BRAKE_WARNING_LED, ag.isBrake);
+    Output.setLED(SAS_WARNING_LED, autopilotEnabled ? ((millis() / AUTOPILOT_LED_BLINK_INTERVAL) % 2) : ag.isSAS);
+    Output.setLED(RCS_WARNING_LED, ag.isRCS);
 }
 
 void setSFLEDs()
 {
-    static int debugCounter = 0;
-    bool debugOn = Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON;
     bool newLEDs[20];
     const int sfPins[20] = {SOLID_FUEL_LED_1, SOLID_FUEL_LED_2, SOLID_FUEL_LED_3, SOLID_FUEL_LED_4, 
                             SOLID_FUEL_LED_5, SOLID_FUEL_LED_6, SOLID_FUEL_LED_7, SOLID_FUEL_LED_8,
@@ -1092,26 +1377,24 @@ void setSFLEDs()
                             SOLID_FUEL_LED_13, SOLID_FUEL_LED_14, SOLID_FUEL_LED_15, SOLID_FUEL_LED_16,
                             SOLID_FUEL_LED_17, SOLID_FUEL_LED_18, SOLID_FUEL_LED_19, SOLID_FUEL_LED_20};
     
-    ButtonState val = Input.getVirtualPin(VPIN_STAGE_VIEW_SWITCH, false);
     
     // Default to total if switch not ready
-    if (val == ON) {
+    if (Input.getVirtualPin(VPIN_STAGE_VIEW_SWITCH, false) == ON) 
+    {
         calcResource(solidFuelStageMsg.total, solidFuelStageMsg.available, newLEDs);
-        if (debugOn && debugCounter++ % 100 == 0) printDebug("SF Stage: " + String(solidFuelStageMsg.available) + "/" + String(solidFuelStageMsg.total));
-    } else {
+    } 
+    else 
+    {
         calcResource(solidFuelMsg.total, solidFuelMsg.available, newLEDs);
-        if (debugOn && debugCounter++ % 100 == 0) printDebug("SF Total: " + String(solidFuelMsg.available) + "/" + String(solidFuelMsg.total));
     }
     
-    for (int i = 0; i < 20; i++) {
+    for (int i = 0; i < 20; i++) 
+    {
         Output.setLED(sfPins[i], newLEDs[i]);
     }
 }
-
 void setLFLEDs()
 {
-    static int debugCounter = 0;
-    bool debugOn = Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON;
     bool newLEDs[20];
     const int lfPins[20] = {LIQUID_FUEL_LED_1, LIQUID_FUEL_LED_2, LIQUID_FUEL_LED_3, LIQUID_FUEL_LED_4,
                             LIQUID_FUEL_LED_5, LIQUID_FUEL_LED_6, LIQUID_FUEL_LED_7, LIQUID_FUEL_LED_8,
@@ -1119,26 +1402,23 @@ void setLFLEDs()
                             LIQUID_FUEL_LED_13, LIQUID_FUEL_LED_14, LIQUID_FUEL_LED_15, LIQUID_FUEL_LED_16,
                             LIQUID_FUEL_LED_17, LIQUID_FUEL_LED_18, LIQUID_FUEL_LED_19, LIQUID_FUEL_LED_20};
     
-    ButtonState val = Input.getVirtualPin(VPIN_STAGE_VIEW_SWITCH, false);
-    
     // Default to total if switch not ready
-    if (val == ON) {
+    if (Input.getVirtualPin(VPIN_STAGE_VIEW_SWITCH, false) == ON) 
+    {
         calcResource(liquidFuelStageMsg.total, liquidFuelStageMsg.available, newLEDs);
-        if (debugOn && debugCounter++ % 100 == 0) printDebug("LF Stage: " + String(liquidFuelStageMsg.available) + "/" + String(liquidFuelStageMsg.total));
-    } else {
+    } 
+    else 
+    {
         calcResource(liquidFuelMsg.total, liquidFuelMsg.available, newLEDs);
-        if (debugOn && debugCounter++ % 100 == 0) printDebug("LF Total: " + String(liquidFuelMsg.available) + "/" + String(liquidFuelMsg.total));
     }
     
-    for (int i = 0; i < 20; i++) {
+    for (int i = 0; i < 20; i++) 
+    {
         Output.setLED(lfPins[i], newLEDs[i]);
     }
 }
-
 void setOXLEDs()
 {
-    static int debugCounter = 0;
-    bool debugOn = Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON;
     bool newLEDs[20];
     const int oxPins[20] = {OXIDIZER_LED_1, OXIDIZER_LED_2, OXIDIZER_LED_3, OXIDIZER_LED_4,
                             OXIDIZER_LED_5, OXIDIZER_LED_6, OXIDIZER_LED_7, OXIDIZER_LED_8,
@@ -1146,26 +1426,23 @@ void setOXLEDs()
                             OXIDIZER_LED_13, OXIDIZER_LED_14, OXIDIZER_LED_15, OXIDIZER_LED_16,
                             OXIDIZER_LED_17, OXIDIZER_LED_18, OXIDIZER_LED_19, OXIDIZER_LED_20};
     
-    ButtonState val = Input.getVirtualPin(VPIN_STAGE_VIEW_SWITCH, false);
-    
     // Default to total if switch not ready
-    if (val == ON) {
+    if (Input.getVirtualPin(VPIN_STAGE_VIEW_SWITCH, false) == ON) 
+    {
         calcResource(oxidizerStageMsg.total, oxidizerStageMsg.available, newLEDs);
-        if (debugOn && debugCounter++ % 100 == 0) printDebug("OX Stage: " + String(oxidizerStageMsg.available) + "/" + String(oxidizerStageMsg.total));
-    } else {
+    } 
+    else 
+    {
         calcResource(oxidizerMsg.total, oxidizerMsg.available, newLEDs);
-        if (debugOn && debugCounter++ % 100 == 0) printDebug("OX Total: " + String(oxidizerMsg.available) + "/" + String(oxidizerMsg.total));
     }
     
-    for (int i = 0; i < 20; i++) {
+    for (int i = 0; i < 20; i++) 
+    {
         Output.setLED(oxPins[i], newLEDs[i]);
     }
 }
-
 void setMPLEDs()
 {
-    static int debugCounter = 0;
-    bool debugOn = Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON;
     bool newLEDs[20];
     const int mpPins[20] = {MONOPROPELLANT_LED_1, MONOPROPELLANT_LED_2, MONOPROPELLANT_LED_3, MONOPROPELLANT_LED_4,
                             MONOPROPELLANT_LED_5, MONOPROPELLANT_LED_6, MONOPROPELLANT_LED_7, MONOPROPELLANT_LED_8,
@@ -1173,24 +1450,22 @@ void setMPLEDs()
                             MONOPROPELLANT_LED_13, MONOPROPELLANT_LED_14, MONOPROPELLANT_LED_15, MONOPROPELLANT_LED_16,
                             MONOPROPELLANT_LED_17, MONOPROPELLANT_LED_18, MONOPROPELLANT_LED_19, MONOPROPELLANT_LED_20};
     
-    if (flightStatusMsg.isInEVA()) {
+    if (flightStatusMsg.isInEVA()) 
+    {
         calcResource(evaMonopropellantMsg.total, evaMonopropellantMsg.available, newLEDs);
-        if (debugOn && debugCounter++ % 100 == 0) printDebug("MP EVA: " + String(evaMonopropellantMsg.available) + "/" + String(evaMonopropellantMsg.total));
     }
-    else {
+    else 
+    {
         calcResource(monopropellantMsg.total, monopropellantMsg.available, newLEDs);
-        if (debugOn && debugCounter++ % 100 == 0) printDebug("MP: " + String(monopropellantMsg.available) + "/" + String(monopropellantMsg.total));
     }
     
-    for (int i = 0; i < 20; i++) {
+    for (int i = 0; i < 20; i++) 
+    {
         Output.setLED(mpPins[i], newLEDs[i]);
     }
 }
-
 void setECLEDs()
 {
-    static int debugCounter = 0;
-    bool debugOn = Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON;
     bool newLEDs[20];
     const int ecPins[20] = {ELECTRICITY_LED_1, ELECTRICITY_LED_2, ELECTRICITY_LED_3, ELECTRICITY_LED_4,
                             ELECTRICITY_LED_5, ELECTRICITY_LED_6, ELECTRICITY_LED_7, ELECTRICITY_LED_8,
@@ -1199,14 +1474,12 @@ void setECLEDs()
                             ELECTRICITY_LED_17, ELECTRICITY_LED_18, ELECTRICITY_LED_19, ELECTRICITY_LED_20};
     
     calcResource(electricityMsg.total, electricityMsg.available, newLEDs);
-    if (debugOn && debugCounter++ % 100 == 0) printDebug("EC: " + String(electricityMsg.available) + "/" + String(electricityMsg.total));
     
-    for (int i = 0; i < 20; i++) {
+    for (int i = 0; i < 20; i++) 
+    {
         Output.setLED(ecPins[i], newLEDs[i]);
     }
 }
-
-
 
 void refreshStage()
 {
@@ -1216,15 +1489,15 @@ void refreshStage()
         Output.setLED(STAGE_LED, true);
         if (Input.getVirtualPin(VPIN_STAGE_BUTTON) == ON)
         {
-            if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-                printDebug("Stage button pressed");
+            printDebug("Stage button pressed");
             mySimpit.activateAction(STAGE_ACTION);
         }
     }
     else if (stageLock == OFF)
+    {
         Output.setLED(STAGE_LED, false);
+    }
 }
-
 void refreshAbort()
 {
     ButtonState abortLock = Input.getVirtualPin(VPIN_ABORT_LOCK_SWITCH, false);
@@ -1233,57 +1506,47 @@ void refreshAbort()
         Output.setLED(ABORT_LED, true);
         if (Input.getVirtualPin(VPIN_ABORT_BUTTON) == ON)
         {
-            if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-                printDebug("Abort button pressed");
+            printDebug("Abort button pressed");
             mySimpit.activateAction(ABORT_ACTION);
         }
     }
     else if (abortLock == OFF)
+    {
         Output.setLED(ABORT_LED, false);
+    }
 }
-
 void refreshLights()
 {
-    ButtonState lightSwitch = Input.getVirtualPin(VPIN_LIGHTS_SWITCH);
-    switch (lightSwitch)
+    switch (Input.getVirtualPin(VPIN_LIGHTS_SWITCH))
     {
     case NOT_READY:
         break;
     case ON:
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("Lights ON");
+        printDebug("Lights ON");
         mySimpit.activateAction(LIGHT_ACTION);
         break;
     case OFF:
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("Lights OFF");
+        printDebug("Lights OFF");
         mySimpit.deactivateAction(LIGHT_ACTION);
         break;
     }
 }
-
 void refreshGear()
 {
-    ButtonState val = Input.getVirtualPin(VPIN_GEAR_SWITCH);
-    switch (val)
+    switch (Input.getVirtualPin(VPIN_GEAR_SWITCH))
     {
     case NOT_READY:
         break;
     case ON:
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("Gear DOWN");
-        mySimpit.activateAction(GEAR_ACTION);
-        break;
-    case OFF:
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("Gear UP");
+        printDebug("Gear UP");
         mySimpit.deactivateAction(GEAR_ACTION);
         break;
+    case OFF:
+        printDebug("Gear DOWN");
+        mySimpit.activateAction(GEAR_ACTION);
+        break;
     }
-
-    Output.setLED(GEAR_WARNING_LED, ag.isGear);
 }
-
 void refreshBrake()
 {
     ButtonState val = Input.getVirtualPin(VPIN_BRAKE_SWITCH);
@@ -1292,97 +1555,79 @@ void refreshBrake()
     case NOT_READY:
         break;
     case ON:
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("Brakes ON");
+        printDebug("Brakes ON");
         mySimpit.activateAction(BRAKES_ACTION);
         break;
     case OFF:
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("Brakes OFF");
+        printDebug("Brakes OFF");
         mySimpit.deactivateAction(BRAKES_ACTION);
         break;
     }
-
-    Output.setLED(BRAKE_WARNING_LED, ag.isBrake);
 }
-
 void refreshDocking()
 {
-    ButtonState val = Input.getVirtualPin(VPIN_DOCKING_SWITCH);
-    switch (val)
+    const bool DONT_CHANGE = true;
+    ButtonState val = Input.getVirtualPin(VPIN_DOCKING_SWITCH, DONT_CHANGE);
+    if (val == ON || val == OFF)
     {
-    case NOT_READY:
-        break;
-    case ON:
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
+        if (val == ON)
             printDebug("Docking mode ON");
-        break;
-    case OFF:
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
+        else
             printDebug("Docking mode OFF");
-        break;
+        
+        keyboardEmulatorMessage msg(0x2E);  // Delete key (toggle docking mode)
+        mySimpit.send(KEYBOARD_EMULATOR, msg);
     }
 }
-
 void refreshCAGs()
 {
     if (Input.getVirtualPin(VPIN_CAG1) == ON)
     {
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("CAG1 toggled");
+        printDebug("CAG1 toggled");
         mySimpit.toggleCAG(1);
     }
     if (Input.getVirtualPin(VPIN_CAG2) == ON)
     {
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("CAG2 toggled");
+        printDebug("CAG2 toggled");
         mySimpit.toggleCAG(2);
     }
     if (Input.getVirtualPin(VPIN_CAG3) == ON)
     {
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("CAG3 toggled");
+        printDebug("CAG3 toggled");
         mySimpit.toggleCAG(3);
     }
     if (Input.getVirtualPin(VPIN_CAG4) == ON)
     {
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("CAG4 toggled");
+        printDebug("CAG4 toggled");
         mySimpit.toggleCAG(4);
     }
     if (Input.getVirtualPin(VPIN_CAG5) == ON)
     {
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("CAG5 toggled");
+        printDebug("CAG5 toggled");
         mySimpit.toggleCAG(5);
     }
     if (Input.getVirtualPin(VPIN_CAG6) == ON)
     {
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("CAG6 toggled");
+        printDebug("CAG6 toggled");
         mySimpit.toggleCAG(6);
     }
     if (Input.getVirtualPin(VPIN_CAG7) == ON)
     {
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("CAG7 toggled");
+        printDebug("CAG7 toggled");
         mySimpit.toggleCAG(7);
     }    if (Input.getVirtualPin(VPIN_CAG8) == ON)
     {
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("CAG8 toggled");
+        printDebug("CAG8 toggled");
         mySimpit.toggleCAG(8);
     }
     if (Input.getVirtualPin(VPIN_CAG9) == ON)
     {
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("CAG9 toggled");
+        printDebug("CAG9 toggled");
         mySimpit.toggleCAG(9);
     }
     if (Input.getVirtualPin(VPIN_CAG10) == ON)
     {
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("CAG10 toggled");
+        printDebug("CAG10 toggled");
         mySimpit.toggleCAG(10);
     }
 
@@ -1399,272 +1644,247 @@ void refreshCAGs()
     Output.setLED(CAG10_LED, cagStatusMsg.is_action_activated(10));
 }
 
-void refreshCamReset()
-{
-    if (Input.getVirtualPin(VPIN_CAM_RESET_BUTTON) == ON)
-    {
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("Camera reset");
-        mySimpit.setCameraMode(FLIGHT_CAMERA_AUTO);
-    }
-}
-
-void refreshCamMode()
-{
-    if (Input.getVirtualPin(VPIN_CAM_MODE_BUTTON) == ON)
-    {
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("Camera mode changed");
-        mySimpit.setCameraMode(CAMERA_NEXT_MODE);
-    }
-}
-
-void refreshFocus()
-{
-    if (Input.getVirtualPin(VPIN_FOCUS_BUTTON) == ON)
-    {
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("Focus changed");
-        mySimpit.setCameraMode(CAMERA_NEXT);  // Cycle to next focus target
-    }
-}
-
-void refreshView()
-{
-    ButtonState val = Input.getVirtualPin(VPIN_VIEW_SWITCH);
-    if (val == ON)
-    {
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("Internal View");
-        
-    }
-    else if (val == OFF)
-    {
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("External View");
-        
-    }
-}
-
-// Changes from flight view to map view and vice versa, needs to check current state because this is a switch
-void refreshNav()
-{
-    // NOTE: Map toggle requires keyboard emulation which doesn't work on Linux with Arduino Due
-    // This function is disabled. For Linux, use Leonardo/Micro board with Keyboard.h library
-    // Or test on Windows where KEYBOARD_EMULATOR works
-    /*
-    const bool DONT_CHANGE = true;
-    ButtonState val = Input.getVirtualPin(VPIN_NAV_SWITCH, DONT_CHANGE);
-    if (val == ON || val == OFF)
-    {
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("Map Toggled");
-        byte key = 0x4D;  // 'M' key - Windows only!
-        mySimpit.send(KEYBOARD_EMULATOR, key);
-    }
-    */
-}
-
-void refreshUI()
-{
-    // NOTE: UI toggle requires keyboard emulation which doesn't work on Linux with Arduino Due
-    // This function is disabled. For Linux, use Leonardo/Micro board with Keyboard.h library
-    // Or test on Windows where KEYBOARD_EMULATOR works
-    /*
-    const bool DONT_CHANGE = true;
-    ButtonState val = Input.getVirtualPin(VPIN_UI_SWITCH, DONT_CHANGE);
-    if (val == ON || val == OFF)
-    {
-        printDebug("UI Toggled");
-        byte key = 0x74;  // 'F2' key - Windows only!
-        mySimpit.send(KEYBOARD_EMULATOR, key);
-    }
-    */
-}
-
-void refreshScreenshot()
-{
-    // Screenshot functionality requires keyboard emulation (F1 key press)
-    // which doesn't work on Linux with Arduino Due.
-    // KerbalSimpit library has no native screenshot API.
-    // User must press F1 manually to take screenshots.
-    
-    /* Original code - disabled for Linux/Due compatibility
-    if (Input.getVirtualPin(VPIN_SCREENSHOT_BUTTON) == ON) 
-    {
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("Screenshot taken");
-        byte key = 0x70;  // F1 key - requires keyboard emulation (Windows only or Leonardo/Micro board)
-        mySimpit.send(KEYBOARD_EMULATOR, key);
-    }
-    */
-}
-
-void refreshWarp()
-{
-    timewarpMessage twMsg;
-    ButtonState lock = Input.getVirtualPin(VPIN_WARP_LOCK_SWITCH);
-    ButtonState physWarp = Input.getVirtualPin(VPIN_PHYS_WARP_SWITCH);
-
-    // Handle physics warp switch (only if warp lock is ON)
-    if (physWarp == ON && lock == ON)
-    {
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("Physics warp 2x enabled");
-        twMsg.command = TIMEWARP_X2_PHYSICAL;
-        mySimpit.send(TIMEWARP_MESSAGE, twMsg);
-        return;
-    }
-    else if (physWarp == OFF && lock == ON)
-    {
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("Physics warp disabled - canceling all warp");
-        twMsg.command = TIMEWARP_X1;
-        mySimpit.send(TIMEWARP_MESSAGE, twMsg);
-        return;
-    }
-
-    // Cancel warp button
-    if (Input.getVirtualPin(VPIN_CANCEL_WARP_BUTTON) == ON)
-    {
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("Warp cancelled");
-        twMsg.command = TIMEWARP_X1;
-        mySimpit.send(TIMEWARP_MESSAGE, twMsg);
-        return;
-    }
-
-    // If warp lock is OFF, cancel warp
-    if (lock == OFF)
-    {
-        twMsg.command = TIMEWARP_X1;
-        mySimpit.send(TIMEWARP_MESSAGE, twMsg);
-        return;
-    }
-    
-    if (Input.getVirtualPin(VPIN_WARP_LOCK_SWITCH, false) == OFF) 
-        return;
-
-    if (Input.getVirtualPin(VPIN_INCREASE_WARP_BUTTON) == ON) 
-    {
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("Warp increased");
-        twMsg.command = TIMEWARP_UP;
-        mySimpit.send(TIMEWARP_MESSAGE, twMsg);
-        return;
-    }
-    if (Input.getVirtualPin(VPIN_DECREASE_WARP_BUTTON) == ON) 
-    {
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("Warp decreased");
-        twMsg.command = TIMEWARP_DOWN;
-        mySimpit.send(TIMEWARP_MESSAGE, twMsg);
-        return;
-    }
-}
-
-void refreshPause()
-{
-    if (Input.getVirtualPin(VPIN_PAUSE_BUTTON) == ON) 
-    {
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("Pause toggled");
-    }
-}
-
 void refreshSAS()
 {
     ButtonState sasSwitch = Input.getVirtualPin(VPIN_SAS_SWITCH);
     if (sasSwitch == ON)
     {
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("SAS ON");
+        printDebug("SAS ON");
         mySimpit.activateAction(SAS_ACTION);
     }
     else if (sasSwitch == OFF)
     {
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("SAS OFF");
+        printDebug("SAS OFF");
         mySimpit.deactivateAction(SAS_ACTION);
     }
-
-    Output.setLED(SAS_WARNING_LED, ag.isSAS);
 }
-
 void refreshRCS()
 {
     ButtonState rcsSwitch = Input.getVirtualPin(VPIN_RCS_SWITCH);
     if (rcsSwitch == ON)
     {
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("RCS ON");
+        printDebug("RCS ON");
         mySimpit.activateAction(RCS_ACTION);
     }
     else if (rcsSwitch == OFF)
     {
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("RCS OFF");
+        printDebug("RCS OFF");
         mySimpit.deactivateAction(RCS_ACTION);
     }
-
-    Output.setLED(RCS_WARNING_LED, ag.isRCS);
 }
-
 void refreshAllSASModes()
 {
-    bool debugOn = Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON;
-    
     if (Input.getVirtualPin(VPIN_SAS_STABILITY_ASSIST_BUTTON) == ON)
     {
-        if (debugOn) printDebug("SAS: Stability Assist");
+        printDebug("SAS: Stability Assist");
         mySimpit.setSASMode(AP_STABILITYASSIST);
     }
     if (Input.getVirtualPin(VPIN_SAS_MANEUVER_BUTTON) == ON)
     {
-        if (debugOn) printDebug("SAS: Maneuver");
+        printDebug("SAS: Maneuver");
         mySimpit.setSASMode(AP_MANEUVER);
     }
     if (Input.getVirtualPin(VPIN_SAS_PROGRADE_BUTTON) == ON)
     {
-        if (debugOn) printDebug("SAS: Prograde");
+        printDebug("SAS: Prograde");
         mySimpit.setSASMode(AP_PROGRADE);
     }
     if (Input.getVirtualPin(VPIN_SAS_RETROGRADE_BUTTON) == ON)
     {
-        if (debugOn) printDebug("SAS: Retrograde");
+        printDebug("SAS: Retrograde");
         mySimpit.setSASMode(AP_RETROGRADE);
     }
     if (Input.getVirtualPin(VPIN_SAS_NORMAL_BUTTON) == ON)
     {
-        if (debugOn) printDebug("SAS: Normal");
+        printDebug("SAS: Normal");
         mySimpit.setSASMode(AP_NORMAL);
     }
     if (Input.getVirtualPin(VPIN_SAS_ANTI_NORMAL_BUTTON) == ON)
     {
-        if (debugOn) printDebug("SAS: Anti-Normal");
+        printDebug("SAS: Anti-Normal");
         mySimpit.setSASMode(AP_ANTINORMAL);
     }
     if (Input.getVirtualPin(VPIN_SAS_RADIAL_IN_BUTTON) == ON)
     {
-        if (debugOn) printDebug("SAS: Radial In");
+        printDebug("SAS: Radial In");
         mySimpit.setSASMode(AP_RADIALIN);
     }
     if (Input.getVirtualPin(VPIN_SAS_RADIAL_OUT_BUTTON) == ON)
     {
-        if (debugOn) printDebug("SAS: Radial Out");
+        printDebug("SAS: Radial Out");
         mySimpit.setSASMode(AP_RADIALOUT);
     }
     if (Input.getVirtualPin(VPIN_SAS_TARGET_BUTTON) == ON)
     {
-        if (debugOn) printDebug("SAS: Target");
+        printDebug("SAS: Target");
         mySimpit.setSASMode(AP_TARGET);
     }
     if (Input.getVirtualPin(VPIN_SAS_ANTI_TARGET_BUTTON) == ON)
     {
-        if (debugOn) printDebug("SAS: Anti-Target");
+        printDebug("SAS: Anti-Target");
         mySimpit.setSASMode(AP_ANTITARGET);
     }
+}
 
+void refreshCamReset()
+{
+    if (Input.getVirtualPin(VPIN_CAM_RESET_BUTTON) == ON)
+    {
+        printDebug("Camera reset - backtick key");
+        keyboardEmulatorMessage msg(0xC0);  // Backtick key
+        mySimpit.send(KEYBOARD_EMULATOR, msg);
+    }
+}
+void refreshCamMode()
+{
+    if (Input.getVirtualPin(VPIN_CAM_MODE_BUTTON) == ON)
+    {
+        printDebug("Camera mode changed - V key");
+        keyboardEmulatorMessage msg(0x56); // V key
+        mySimpit.send(KEYBOARD_EMULATOR, msg);
+    }
+}
+void refreshFocus()
+{
+    if (Input.getVirtualPin(VPIN_FOCUS_BUTTON) == ON)
+    {
+        printDebug("Focus changed");
+        keyboardEmulatorMessage msg(0xDD);  // ] key
+        mySimpit.send(KEYBOARD_EMULATOR, msg);
+    }
+}
+void refreshView()
+{
+    if (Input.getVirtualPin(VPIN_VIEW_SWITCH) != NOT_READY) // Switch toggles in both states
+    {
+        printDebug("Camera view cycled");
+        keyboardEmulatorMessage msg(0x43);  // C key (toggle camera view)
+        mySimpit.send(KEYBOARD_EMULATOR, msg);
+    }
+}
+void refreshNav()
+{
+    if (Input.getVirtualPin(VPIN_NAV_SWITCH) != NOT_READY) // Switch toggles in both states
+    {
+        printDebug("Map Toggled");
+        keyboardEmulatorMessage msg(0x4D);  // M key (toggle map view)
+        mySimpit.send(KEYBOARD_EMULATOR, msg);
+    }
+}
+void refreshUI()
+{
+    if (Input.getVirtualPin(VPIN_UI_BUTTON) == ON)
+    {
+        printDebug("UI Toggled");
+        keyboardEmulatorMessage msg(0x71);  // F2
+        mySimpit.send(KEYBOARD_EMULATOR, msg);
+    }
+}
+
+void refreshSoundSwitch()
+{
+    if (Input.getVirtualPin(VPIN_SOUND_SWITCH) != NOT_READY)
+    {
+        printDebug("Sound switch toggled");
+        keyboardEmulatorMessage msg(0xDE);  // VK_OEM_7 = single/double quote key
+        mySimpit.send(KEYBOARD_EMULATOR, msg);
+    }
+}
+
+void refreshAP()
+{
+    // Repurpose the physical-warp switch as an AUTOPILOT toggle.
+    auto ap = Input.getVirtualPin(VPIN_AUTO_PILOT_SWITCH, true);
+    if (ap == ON)
+    {
+        // Engage autopilot only if connected to KSP and in flight
+        if (isConnectedToKSP && flightStatusMsg.isInFlight())
+        {
+            // Capture current telemetry as the hold targets
+            // Use prograde (velocity) heading for more stable flight - less sensitive to vessel oscillations
+            autopilotHeading = vesselPointingMsg.surfaceVelocityHeading;
+            autopilotSpeed = velocityMsg.surface;
+            autopilotAltitude = altitudeMsg.sealevel;
+            autopilotEngageTime = millis();
+            autopilotEnabled = true;
+
+            // Save current SAS state and enable SAS for autopilot
+            sasWasOnBeforeAutopilot = ag.isSAS;
+            mySimpit.activateAction(SAS_ACTION);
+
+            mySimpit.printToKSP("Autopilot Engaged", PRINT_TO_SCREEN);
+        }
+        else
+        {
+            printDebug("Cannot engage autopilot");
+        }
+    }
+    else if (ap == OFF)
+    {
+        if (autopilotEnabled)
+        {
+            autopilotEnabled = false;
+            
+            // Restore SAS to its previous state
+            sasWasOnBeforeAutopilot ? mySimpit.activateAction(SAS_ACTION) : mySimpit.deactivateAction(SAS_ACTION);
+            
+            mySimpit.printToKSP("Autopilot DISENGAGED", PRINT_TO_SCREEN);
+            printDebug("Autopilot disengaged");
+        }
+    }
+}
+
+void refreshWarp()
+{
+    timewarpMessage twMsg;
+
+    // If state just set off, cancel warp
+    if (Input.getVirtualPin(VPIN_WARP_LOCK_SWITCH) == OFF)
+    {
+        twMsg.command = TIMEWARP_X1;
+        mySimpit.send(TIMEWARP_MESSAGE, twMsg);
+    }
+    // Cancel warp button, always allowed
+    if (Input.getVirtualPin(VPIN_CANCEL_WARP_BUTTON) == ON)
+    {
+        printDebug("Warp cancelled");
+        twMsg.command = TIMEWARP_X1;
+        mySimpit.send(TIMEWARP_MESSAGE, twMsg);
+        return;
+    }
+
+    // exit, until unlocked
+    if (Input.getVirtualPin(VPIN_WARP_LOCK_SWITCH, false) == OFF)
+    {
+        return;
+    }
+
+    if (Input.getVirtualPin(VPIN_INCREASE_WARP_BUTTON) == ON) 
+    {
+        printDebug("Warp increased");
+        twMsg.command = TIMEWARP_UP;
+        mySimpit.send(TIMEWARP_MESSAGE, twMsg);
+    } 
+    if (Input.getVirtualPin(VPIN_DECREASE_WARP_BUTTON) == ON) 
+    {
+        printDebug("Warp decreased");
+        twMsg.command = TIMEWARP_DOWN;
+        mySimpit.send(TIMEWARP_MESSAGE, twMsg);
+    }
+}
+void refreshPause()
+{
+    if (Input.getVirtualPin(VPIN_PAUSE_BUTTON) == ON)
+    {
+        printDebug("Pause toggled");
+        keyboardEmulatorMessage msg(0x1B);  // ESC key (toggle pause)
+        mySimpit.send(KEYBOARD_EMULATOR, msg);
+    }
+}
+
+void setSASModeLEDs()
+{
+    // Turn off all SAS mode LEDs first
     Output.setLED(SAS_STABILITY_ASSIST_LED, false);
     Output.setLED(SAS_MANEUVER_LED, false);
     Output.setLED(SAS_PROGRADE_LED, false);
@@ -1705,6 +1925,7 @@ void refreshAllSASModes()
         case AP_TARGET:
             Output.setLED(SAS_TARGET_LED, true);
             break;
+    
         case AP_ANTITARGET:
             Output.setLED(SAS_ANTI_TARGET_LED, true);
             break;
@@ -1714,85 +1935,348 @@ void refreshAllSASModes()
         }
     }
 }
-
+void refreshRotationButton()
+{
+    if (Input.getVirtualPin(VPIN_ROTATION_BUTTON) == ON)
+    {
+        printDebug("Rotation button - HOME key");
+        keyboardEmulatorMessage msg(0x24);  // HOME key
+        mySimpit.send(KEYBOARD_EMULATOR, msg);
+    }
+}
 void refreshJump()
 {
-    if (Input.getVirtualPin(VPIN_JUMP_BUTTON) == ON) {}
+    if (Input.getVirtualPin(VPIN_ROTATION_BUTTON) == ON)
+    {
+        printDebug("Rotation button - SPACE key");
+        
+        keyboardEmulatorMessage msg(0x20);  // Space key
+        mySimpit.send(KEYBOARD_EMULATOR, msg);
+    }
 }
-
 void refreshGrab()
 {
-    if (Input.getVirtualPin(VPIN_GRAB_BUTTON) == ON) {}
+    // Check if we're in EVAcccmmcc
+    bool inEVA = flightStatusMsg.isInEVA();
+    bool inFlight = flightStatusMsg.isInFlight();
+    
+    if (Input.getVirtualPin(VPIN_GRAB_BUTTON) == ON)
+    {
+        if (inEVA)
+        {
+            // EVA Grab using F key (VK code 0x46)
+            printDebug("EVA Grab");
+            
+            keyboardEmulatorMessage msg(0x46);  // F key (EVA grab)
+            mySimpit.send(KEYBOARD_EMULATOR, msg);
+        }
+        else if (inFlight && !inEVA)
+        {
+            // In flight (not EVA): Decrease precision mode
+            precisionModifier -= PRECISION_STEP;
+            if (precisionModifier < MIN_PRECISION_MODIFIER)
+                precisionModifier = MIN_PRECISION_MODIFIER;
+            
+            mySimpit.printToKSP("Precision: " + String((int)(precisionModifier * 100)) + "%", PRINT_TO_SCREEN);
+            printDebug("Precision decreased to " + String((int)(precisionModifier * 100)) + "%");
+        }
+    }
+    
 }
-
 void refreshBoard()
 {
-    if (Input.getVirtualPin(VPIN_BOARD_BUTTON) == ON) {}
+    // Check if we're in EVA
+    bool inEVA = flightStatusMsg.isInEVA();
+    bool inFlight = flightStatusMsg.isInFlight();
+    
+    // Only trigger on button press (transition from OFF to ON)
+    if (Input.getVirtualPin(VPIN_BOARD_BUTTON) == ON)
+    {
+        if (inEVA)
+        {
+            // EVA Board using B key (VK code 0x42)
+            printDebug("EVA Board");
+            
+            keyboardEmulatorMessage msg(0x42);  // B key (EVA board)
+            mySimpit.send(KEYBOARD_EMULATOR, msg);
+        }
+        else if (inFlight && !inEVA)
+        {
+            // In flight (not EVA): Increase precision mode
+            precisionModifier += PRECISION_STEP;
+            if (precisionModifier > MAX_PRECISION_MODIFIER)
+                precisionModifier = MAX_PRECISION_MODIFIER;
+            
+            mySimpit.printToKSP("Precision: " + String((int)(precisionModifier * 100)) + "%", PRINT_TO_SCREEN);
+            printDebug("Precision increased to " + String((int)(precisionModifier * 100)) + "%");
+        }
+    }
 }
 
 void refreshThrottle()
 {
     static int16_t lastThrottle = 0;  // Remember last throttle value
     
+    // If autopilot is enabled, attempt to actively control throttle to maintain speed/altitude
+    if (autopilotEnabled)
+    {
+        
+        // Throttle control: Only for speed adjustment
+        // Altitude is controlled by pitch offset (1° up/down to adjust prograde)
+        if (isConnectedToKSP)
+        {
+            float currentSpeed = velocityMsg.surface;
+            float speedError = autopilotSpeed - currentSpeed; // m/s (positive = need more speed)
+
+            // Determine whether altitude or heading need priority. If so, avoid aggressive speed matching.
+            float currentAlt = altitudeMsg.sealevel;
+            float altErr = autopilotAltitude - currentAlt; // meters
+            float currentHeading = vesselPointingMsg.surfaceVelocityHeading;
+            float hdgErr = shortestAngleDiff(autopilotHeading, currentHeading);
+
+            // Dynamic base throttle that adapts to find equilibrium
+            static float baseThrottle = 0.5; // Start at 50%
+            
+            // Adapt base throttle continuously when stable
+            if (abs(speedError) < 10.0 && abs(altErr) <= AUTOPILOT_ALT_PRIORITY_THRESHOLD && abs(hdgErr) <= AUTOPILOT_HEADING_PRIORITY_THRESHOLD)
+            {
+                // Continuously adjust base throttle based on speed error
+                if (speedError > 0.5) {
+                    baseThrottle += AP_THROTTLE_ADAPT_RATE; // Need more throttle
+                } else if (speedError < -0.5) {
+                    baseThrottle -= AP_THROTTLE_ADAPT_RATE; // Need less throttle
+                }
+                // Allow full range for base throttle
+                if (baseThrottle < 0.0) baseThrottle = 0.0;
+                if (baseThrottle > 1.0) baseThrottle = 1.0;
+            }
+
+            float throttleFraction;
+            if (abs(altErr) > AUTOPILOT_ALT_PRIORITY_THRESHOLD || abs(hdgErr) > AUTOPILOT_HEADING_PRIORITY_THRESHOLD)
+            {
+                // Prioritize altitude/heading: keep base throttle
+                throttleFraction = baseThrottle;
+            }
+            else
+            {
+                // Base throttle + aggressive speed correction using full range
+                throttleFraction = baseThrottle + (AP_SPEED_K * speedError);
+            }
+
+            // Allow full throttle range from 0 to 1
+            if (throttleFraction < 0.0f) throttleFraction = 0.0f;
+            if (throttleFraction > 1.0f) throttleFraction = 1.0f;
+
+            // Smooth throttle changes to avoid abrupt commands
+            static float lastThrottleFraction = 0.3;
+            float alpha = THROTTLE_SMOOTH_ALPHA;
+            float smoothed = lastThrottleFraction * (1.0f - alpha) + throttleFraction * alpha;
+            lastThrottleFraction = smoothed;
+
+            int16_t apThrottle = (int16_t)(smoothed * (float)INT16_MAX);
+            throttleMessage throttleMsg;
+            throttleMsg.throttle = apThrottle;
+            mySimpit.send(THROTTLE_MESSAGE, throttleMsg);
+        }
+        // Block manual throttle while autopilot holds
+        return;
+    }
+
     // Only read and update throttle axis if throttle lock is ON
     if (Input.getVirtualPin(VPIN_THROTTLE_LOCK_SWITCH, false) == ON)
     {
-        int axis = Input.getThrottleAxis() * 1.33;
-        lastThrottle = smoothAndMapAxis(axis, false);
+        int axis = Input.getThrottleAxis();
+        // overflow protection
+        if (axis < MIN_THROTTLE_POS) axis = MIN_THROTTLE_POS;
+        if (axis > MAX_THROTTLE_POS) axis = MAX_THROTTLE_POS;
+        
+        // Apply deadzone at minimum (snap to 0)
+        if (axis < (MIN_THROTTLE_POS + THROTTLE_DEADZONE))
+        {
+            lastThrottle = 0;
+        }
+        // Apply deadzone at maximum (snap to 100%)
+        else if (axis > (MAX_THROTTLE_POS - THROTTLE_DEADZONE))
+        {
+            lastThrottle = INT16_MAX;
+        }
+        else
+        {
+            // Map with adjusted range (excluding deadzones)
+            lastThrottle = map(axis, 
+                              MIN_THROTTLE_POS + THROTTLE_DEADZONE, 
+                              MAX_THROTTLE_POS - THROTTLE_DEADZONE, 
+                              0, INT16_MAX);
+        }
         
         throttleMessage throttleMsg;
         throttleMsg.throttle = lastThrottle;
         if (isConnectedToKSP) mySimpit.send(THROTTLE_MESSAGE, throttleMsg);
     }
     // If lock is OFF, don't send any throttle updates (holds current position in KSP)
+    
+    // Debug output
+    // Removed frequent throttle debug prints to reduce serial spam.
 }
-
 void refreshTranslation()
 {
-    // Check for hold button press (capture values)
-    if (Input.getVirtualPin(VPIN_TRANS_HOLD_BUTTON) == ON && !translationHold)
+    // Translation button now toggles view mode instead of requiring hold
+    // Check for button press to toggle state
+    ButtonState btnState = Input.getVirtualPin(VPIN_TRANSLATION_BUTTON);
+    if (btnState == ON)
     {
-        // Capture current values
+        viewModeEnabled = !viewModeEnabled;
+        printDebug(viewModeEnabled ? "View mode ENABLED" : "View mode DISABLED");
+    }
+    
+    // If view mode is enabled, use joystick for camera control
+    if (viewModeEnabled)
+    {
+        // Use keyboard emulation for camera control (arrow keys) but send momentary key presses
+        // Arrow key VK codes: Up=0x26, Down=0x28, Left=0x25, Right=0x27
+        int x = Input.getTranslationXAxis();
+        int y = Input.getTranslationYAxis();
+        int z = Input.getTranslationZAxis();
+
+        // X-axis: Left/Right camera - send single keypress like zoom
+        if (x < (512 - CAMERA_DEADZONE))
+        {
+            keyboardEmulatorMessage msg(0x25); // Left
+            mySimpit.send(KEYBOARD_EMULATOR, msg);
+        }
+        else if (x > (512 + CAMERA_DEADZONE))
+        {
+            keyboardEmulatorMessage msg(0x27); // Right
+            mySimpit.send(KEYBOARD_EMULATOR, msg);
+        }
+
+        // Y-axis: Up/Down camera (INVERTED - forward = look up, back = look down)
+        if (y < (512 - CAMERA_DEADZONE))
+        {
+            keyboardEmulatorMessage msg(0x26); // Up
+            mySimpit.send(KEYBOARD_EMULATOR, msg);
+        }
+        else if (y > (512 + CAMERA_DEADZONE))
+        {
+            keyboardEmulatorMessage msg(0x28); // Down
+            mySimpit.send(KEYBOARD_EMULATOR, msg);
+        }
+
+        // Z-axis: Zoom in/out using mouse wheel emulation
+        // Using special VK codes: 0xFF01 = wheel up (zoom in), 0xFF02 = wheel down (zoom out)
+        if (z < (512 - CAMERA_DEADZONE))
+        {
+            // Zoom out (Mouse wheel down) - joystick pulled back/down
+            keyboardEmulatorMessage msg(0xFF02);  // Mouse wheel down
+            mySimpit.send(KEYBOARD_EMULATOR, msg);
+        }
+        else if (z > (512 + CAMERA_DEADZONE))
+        {
+            // Zoom in (Mouse wheel up) - joystick pushed forward/up
+            keyboardEmulatorMessage msg(0xFF01);  // Mouse wheel up
+            mySimpit.send(KEYBOARD_EMULATOR, msg);
+        }
+
+        return;
+    }
+
+    // Trim button - add current joystick position to existing trim (accumulative)
+    // Use false parameter for immediate response without waiting for state change
+    static bool lastTransTrimState = false;
+    bool currentTransTrimState = (Input.getVirtualPin(VPIN_TRANS_HOLD_BUTTON, false) == ON);
+    
+    if (currentTransTrimState && !lastTransTrimState) // Detect rising edge (button just pressed)
+    {
+        // Capture current joystick values and add to existing trim
         int x = Input.getTranslationXAxis();
         int y = Input.getTranslationYAxis();
         int z = Input.getTranslationZAxis();
         
-        heldTransX = smoothAndMapAxis(x, true);
-        heldTransY = smoothAndMapAxis(y, false);
-        heldTransZ = smoothAndMapAxis(z, true);
+        int16_t newTrimX = smoothAndMapAxis(x, true);
+        int16_t newTrimY = smoothAndMapAxis(y, false);
+        int16_t newTrimZ = smoothAndMapAxis(z, true);
         
         if (Input.getVirtualPin(VPIN_PRECISION_SWITCH, false) == ON)
         {
-            if (PERCISION_MODIFIER > 0 && PERCISION_MODIFIER < 1)
+            // Only apply precision scaling to flight translation controls.
+            if (Input.getVirtualPin(VPIN_TRANSLATION_BUTTON, false) == OFF)
             {
-                heldTransX *= PERCISION_MODIFIER;
-                heldTransY *= PERCISION_MODIFIER;
-                heldTransZ *= PERCISION_MODIFIER;
+                if (precisionModifier > 0 && precisionModifier < 1)
+                {
+                    newTrimX *= precisionModifier;
+                    newTrimY *= precisionModifier;
+                    newTrimZ *= precisionModifier;
+                }
             }
         }
         
-        translationHold = true;
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("Translation HOLD activated");
+        // Add new trim to existing trim (accumulative) with overflow protection
+        // Use int32_t for intermediate calculation to prevent overflow
+        int32_t tempX = (int32_t)trimTransX + (int32_t)newTrimX;
+        int32_t tempY = (int32_t)trimTransY + (int32_t)newTrimY;
+        int32_t tempZ = (int32_t)trimTransZ + (int32_t)newTrimZ;
+        
+        // Clamp to valid int16_t range
+        trimTransX = (tempX > INT16_MAX) ? INT16_MAX : ((tempX < INT16_MIN) ? INT16_MIN : (int16_t)tempX);
+        trimTransY = (tempY > INT16_MAX) ? INT16_MAX : ((tempY < INT16_MIN) ? INT16_MIN : (int16_t)tempY);
+        trimTransZ = (tempZ > INT16_MAX) ? INT16_MAX : ((tempZ < INT16_MIN) ? INT16_MIN : (int16_t)tempZ);
+        
+        printDebug("Translation TRIM adjusted");
     }
+    lastTransTrimState = currentTransTrimState;
     
-    // Reset button clears hold
-    if (Input.getVirtualPin(VPIN_TRANS_RESET_BUTTON) == ON)
-    {
-        translationHold = false;
-        heldTransX = 0;
-        heldTransY = 0;
-        heldTransZ = 0;
-    }
+    // Reset button clears trim
+    static bool lastTransResetState = false;
+    bool currentTransResetState = (Input.getVirtualPin(VPIN_TRANS_RESET_BUTTON, false) == ON);
     
-    // If in hold mode, send the held values
-    if (translationHold)
+    if (currentTransResetState && !lastTransResetState) // Detect rising edge
     {
-        translationMessage transMsg;
-        transMsg.setXYZ(heldTransX, heldTransZ, heldTransY);
-        if (isConnectedToKSP) mySimpit.send(TRANSLATION_MESSAGE, transMsg);
-        return;
+        trimTransX = 0;
+        trimTransY = 0;
+        trimTransZ = 0;
+        printDebug("Translation TRIM reset");
     }
+    lastTransResetState = currentTransResetState;
+
+    // If autopilot is enabled, block translation inputs and allow joystick override to cancel autopilot
+    if (autopilotEnabled)
+    {
+        int x = Input.getTranslationXAxis();
+        int y = Input.getTranslationYAxis();
+        int z = Input.getTranslationZAxis();
+        const int OVERRIDE_THRESHOLD = 256;
+        bool overrideDetected = (x < (512 - OVERRIDE_THRESHOLD) || x > (512 + OVERRIDE_THRESHOLD) ||
+                                 y < (512 - OVERRIDE_THRESHOLD) || y > (512 + OVERRIDE_THRESHOLD) ||
+                                 z < (512 - OVERRIDE_THRESHOLD) || z > (512 + OVERRIDE_THRESHOLD));
+        bool delayElapsed = (millis() - autopilotEngageTime) >= HOLD_OVERRIDE_DELAY;
+        if (delayElapsed && overrideDetected)
+        {
+            autopilotEnabled = false;
+            
+            // Restore SAS to its previous state
+            if (sasWasOnBeforeAutopilot)
+            {
+                mySimpit.activateAction(SAS_ACTION);
+            }
+            else
+            {
+                mySimpit.deactivateAction(SAS_ACTION);
+            }
+            
+            mySimpit.printToKSP("Autopilot DISENGAGED (joystick override)", PRINT_TO_SCREEN);
+            printDebug("Autopilot cancelled by translation joystick override");
+        }
+        else
+        {
+            // Block translation messages while autopilot holds
+            return;
+        }
+    }
+
+
+    
+    // If we got here, we're not in hold mode anymore (or override just cancelled it)
+    // Continue with normal operation below
         
     // Normal operation - read current joystick values
     int x = Input.getTranslationXAxis();
@@ -1805,347 +2289,916 @@ void refreshTranslation()
 
     if (Input.getVirtualPin(VPIN_PRECISION_SWITCH, false) == ON)
     {
-        if (PERCISION_MODIFIER > 0 && PERCISION_MODIFIER < 1)
+        // Only apply precision scaling to flight translation controls (not when using camera button)
+        if (Input.getVirtualPin(VPIN_TRANSLATION_BUTTON, false) == OFF)
         {
-            transX *= PERCISION_MODIFIER;
-            transY *= PERCISION_MODIFIER;
-            transZ *= PERCISION_MODIFIER;
+            if (precisionModifier > 0 && precisionModifier < 1)
+            {
+                transX *= precisionModifier;
+                transY *= precisionModifier;
+                transZ *= precisionModifier;
+            }
         }
     }
+
+    // Add trim offsets to joystick input with overflow protection
+    int32_t tempX = (int32_t)transX + (int32_t)trimTransX;
+    int32_t tempY = (int32_t)transY + (int32_t)trimTransY;
+    int32_t tempZ = (int32_t)transZ + (int32_t)trimTransZ;
+    
+    // Clamp to valid range
+    transX = (tempX > INT16_MAX) ? INT16_MAX : ((tempX < INT16_MIN) ? INT16_MIN : (int16_t)tempX);
+    transY = (tempY > INT16_MAX) ? INT16_MAX : ((tempY < INT16_MIN) ? INT16_MIN : (int16_t)tempY);
+    transZ = (tempZ > INT16_MAX) ? INT16_MAX : ((tempZ < INT16_MIN) ? INT16_MIN : (int16_t)tempZ);
+
+    // In shared control mode, translation joystick is used for rotation - don't send translation message
+    // UNLESS view mode is enabled (camera controls take priority over dual player mode)
+    if (Input.getVirtualPin(VPIN_DUAL_SWITCH, false) == ON)
+        return;
 
     translationMessage transMsg;
     transMsg.setXYZ(transX, transZ, transY);
     if (isConnectedToKSP) mySimpit.send(TRANSLATION_MESSAGE, transMsg);
 }
 
+bool handleAutopilotRotation()
+{
+    if (!autopilotEnabled)
+        return false;
+    
+    int x = Input.getRotationXAxis();
+    int y = Input.getRotationYAxis();
+    int z = Input.getRotationZAxis();
+    const int OVERRIDE_THRESHOLD = 256;
+    bool overrideDetected = (x < (512 - OVERRIDE_THRESHOLD) || x > (512 + OVERRIDE_THRESHOLD) ||
+                             y < (512 - OVERRIDE_THRESHOLD) || y > (512 + OVERRIDE_THRESHOLD) ||
+                             z < (512 - OVERRIDE_THRESHOLD) || z > (512 + OVERRIDE_THRESHOLD));
+    bool delayElapsed = (millis() - autopilotEngageTime) >= HOLD_OVERRIDE_DELAY;
+    
+    if (delayElapsed && overrideDetected)
+    {
+        autopilotEnabled = false;
+        
+        // Restore SAS to its previous state
+        if (sasWasOnBeforeAutopilot)
+        {
+            mySimpit.activateAction(SAS_ACTION);
+        }
+        else
+        {
+            mySimpit.deactivateAction(SAS_ACTION);
+        }
+        
+        mySimpit.printToKSP("Autopilot DISENGAGED (joystick override)", PRINT_TO_SCREEN);
+        printDebug("Autopilot cancelled by rotation joystick override");
+        return false;
+    }
+    
+    // Active autopilot corrections
+    if (isConnectedToKSP)
+    {
+        // Heading control (yaw) - use prograde (velocity) heading for stability
+        float currentHeading = vesselPointingMsg.surfaceVelocityHeading;
+        float hdgErr = shortestAngleDiff(autopilotHeading, currentHeading);
+        
+        float yawFrac = 0.0f;
+        if (abs(hdgErr) > 2.0f)
+        {
+            yawFrac = hdgErr * AP_HEADING_K;
+            if (yawFrac > 1.0f) yawFrac = 1.0f;
+            if (yawFrac < -1.0f) yawFrac = -1.0f;
+        }
+        int16_t yawVal = (int16_t)(yawFrac * (float)INT16_MAX);
+
+        // Pitch control: Monitor prograde pitch and adjust vessel pitch to correct it
+        float progradePitch = vesselPointingMsg.surfaceVelocityPitch;
+        float currentAlt = altitudeMsg.sealevel;
+        float altErr = autopilotAltitude - currentAlt;
+
+        // Determine target prograde pitch based on altitude error
+        float targetProgradePitch = 0.0f;
+        if (abs(altErr) > 8.0f)
+        {
+            float pitchOffset = altErr / 15.0f;
+            if (pitchOffset > 12.0f) pitchOffset = 12.0f;
+            if (pitchOffset < -12.0f) pitchOffset = -12.0f;
+            targetProgradePitch = pitchOffset;
+        }
+        
+        float progradeErr = targetProgradePitch - progradePitch;
+        
+        float pitchFrac = 0.0f;
+        if (abs(progradeErr) > 0.3f)
+        {
+            float gain = (abs(progradeErr) > 2.0f) ? 0.08 : 0.05;
+            pitchFrac = progradeErr * gain;
+            float maxFrac = (abs(progradeErr) > 2.0f) ? 0.35f : 0.20f;
+            if (pitchFrac > maxFrac) pitchFrac = maxFrac;
+            if (pitchFrac < -maxFrac) pitchFrac = -maxFrac;
+        }
+        int16_t pitchVal = (int16_t)(pitchFrac * (float)INT16_MAX);
+
+        // Roll hold: keep roll at zero (level wings)
+        float currentRoll = vesselPointingMsg.roll;
+        float rollErr = shortestAngleDiff(0.0f, currentRoll);
+        
+        float rollFrac = 0.0f;
+        if (abs(rollErr) > 1.0f)
+        {
+            rollFrac = rollErr * AP_ROLL_K;
+            if (rollFrac > 1.0f) rollFrac = 1.0f;
+            if (rollFrac < -1.0f) rollFrac = -1.0f;
+        }
+        int16_t rollVal = (int16_t)(-rollFrac * (float)INT16_MAX);
+
+        // Compose and send rotation
+        rotationMessage rotMsg;
+        rotMsg.setPitchRollYaw(pitchVal, rollVal, yawVal);
+        mySimpit.send(ROTATION_MESSAGE, rotMsg);
+    }
+    
+    return true;
+}
+
 void refreshRotation()
 {
-    // Check for hold button press (capture values)
-    if (Input.getVirtualPin(VPIN_ROT_HOLD_BUTTON) == ON && !rotationHold)
+    bool inEVA = flightStatusMsg.isInEVA();
+    // In EVA mode, use rotation joystick for WASD movement
+    if (inEVA)
     {
-        // Capture current values
+        const int EVA_DEADZONE = 100;
+        int x = Input.getRotationXAxis();
+        int y = Input.getRotationYAxis();
+        
+        if (x < (512 - EVA_DEADZONE))
+        {
+            keyboardEmulatorMessage msg(0x41); // A Key
+            mySimpit.send(KEYBOARD_EMULATOR, msg);
+        }
+        else if (x > (512 + EVA_DEADZONE))
+        {
+            keyboardEmulatorMessage msg(0x44); // D Key
+            mySimpit.send(KEYBOARD_EMULATOR, msg);
+        }
+        
+        if (y < (512 - EVA_DEADZONE))
+        {
+            keyboardEmulatorMessage msg(0x57); // W Key
+            mySimpit.send(KEYBOARD_EMULATOR, msg);
+        }
+        else if (y > (512 + EVA_DEADZONE))
+        {
+            keyboardEmulatorMessage msg(0x53); // S Key
+            mySimpit.send(KEYBOARD_EMULATOR, msg);
+        }
+        
+        return; // EVA so exit
+    }
+    
+    static bool lastRotTrimState = false;
+    bool currentRotTrimState = (Input.getVirtualPin(VPIN_ROT_HOLD_BUTTON, false) == ON);
+    
+    if (currentRotTrimState && !lastRotTrimState) // Detect rising edge (button just pressed)
+    {
+        // Capture current joystick values and add to existing trim
         int x = Input.getRotationXAxis();
         int y = Input.getRotationYAxis();
         int z = Input.getRotationZAxis();
         
-        heldRotX = smoothAndMapAxis(x, true);
-        heldRotY = smoothAndMapAxis(y, true);
-        heldRotZ = smoothAndMapAxis(z, false);
+        int16_t newTrimX = smoothAndMapAxis(x, true);
+        int16_t newTrimY = smoothAndMapAxis(y, true);
+        int16_t newTrimZ = smoothAndMapAxis(z, false);
         
         if (Input.getVirtualPin(VPIN_PRECISION_SWITCH, false) == ON)
         {
-            if (PERCISION_MODIFIER > 0 && PERCISION_MODIFIER < 1)
+            // Only apply precision scaling to flight rotation controls.
+            if (Input.getVirtualPin(VPIN_ROTATION_BUTTON, false) == OFF)
             {
-                heldRotX *= PERCISION_MODIFIER;
-                heldRotY *= PERCISION_MODIFIER;
-                heldRotZ *= PERCISION_MODIFIER;
+                if (precisionModifier > 0 && precisionModifier < 1)
+                {
+                    newTrimX *= precisionModifier;
+                    newTrimY *= precisionModifier;
+                    newTrimZ *= precisionModifier;
+                }
             }
         }
         
-        rotationHold = true;
-        if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
-            printDebug("Rotation HOLD activated");
+        // Add new trim to existing trim (accumulative) with overflow protection
+        // Use int32_t for intermediate calculation to prevent overflow
+        int32_t tempX = (int32_t)trimRotX + (int32_t)newTrimX;
+        int32_t tempY = (int32_t)trimRotY + (int32_t)newTrimY;
+        int32_t tempZ = (int32_t)trimRotZ + (int32_t)newTrimZ;
+        
+        // Clamp to valid int16_t range
+        trimRotX = (tempX > INT16_MAX) ? INT16_MAX : ((tempX < INT16_MIN) ? INT16_MIN : (int16_t)tempX);
+        trimRotY = (tempY > INT16_MAX) ? INT16_MAX : ((tempY < INT16_MIN) ? INT16_MIN : (int16_t)tempY);
+        trimRotZ = (tempZ > INT16_MAX) ? INT16_MAX : ((tempZ < INT16_MIN) ? INT16_MIN : (int16_t)tempZ);
+        
+        printDebug("Rotation TRIM adjusted");
     }
+    lastRotTrimState = currentRotTrimState;
     
-    // Reset button clears hold
-    if (Input.getVirtualPin(VPIN_ROT_RESET_BUTTON) == ON)
+    // Reset button clears trim
+    static bool lastRotResetState = false;
+    bool currentRotResetState = (Input.getVirtualPin(VPIN_ROT_RESET_BUTTON, false) == ON);
+    
+    if (currentRotResetState && !lastRotResetState) // Detect rising edge
     {
-        rotationHold = false;
-        heldRotX = 0;
-        heldRotY = 0;
-        heldRotZ = 0;
+        trimRotX = 0;
+        trimRotY = 0;
+        trimRotZ = 0;
+        printDebug("Rotation TRIM reset");
     }
-    
-    // If in hold mode, send the held values
-    if (rotationHold)
-    {
-        rotationMessage rotMsg;
-        rotMsg.setPitchRollYaw(heldRotY, heldRotX, heldRotZ);
-        if (isConnectedToKSP) mySimpit.send(ROTATION_MESSAGE, rotMsg);
+    lastRotResetState = currentRotResetState;
+        
+    // If autopilot is enabled, handle it and return if still active
+    if (handleAutopilotRotation())
         return;
-    }
     
-    // Normal operation - read current joystick values
+    // Continue with normal operation below
+    
+    // Check if shared control mode is enabled (UI switch)
+    bool sharedControlMode = (Input.getVirtualPin(VPIN_DUAL_SWITCH, false) == ON && !viewModeEnabled);
+    
+    // Read rotation joystick (Player 1)
     int x = Input.getRotationXAxis();
     int y = Input.getRotationYAxis();
     int z = Input.getRotationZAxis();
     
-    if (Input.getVirtualPin(VPIN_ENABLE_LOOK_BUTTON, false) == ON)
+
+    int16_t x1 = smoothAndMapAxis(x, true);
+    int16_t y1 = smoothAndMapAxis(y, true);
+    int16_t z1 = smoothAndMapAxis(z, false);
+
+    int16_t rotX;
+    int16_t rotY;
+    int16_t rotZ;
+
+    if (sharedControlMode) // dual player rotation control
+    {  
+        int16_t x2 = smoothAndMapAxis(Input.getTranslationXAxis(), false);
+        int16_t y2 = smoothAndMapAxis(Input.getTranslationYAxis(), false);
+        int16_t z2 = smoothAndMapAxis(Input.getTranslationZAxis(), false);
+        rotX = dualPlayerHelper(x1, x2);
+        rotY = dualPlayerHelper(y1, y2);
+        rotZ = dualPlayerHelper(z1, z2);
+    }
+    else // regular user rotation control
     {
-        //return;
+        rotX = x1;
+        rotY = y1;
+        rotZ = z1;
     }
 
-    bool isReadyPrint = timer.check();
-    if (isReadyPrint) printDebug("Rot X: " + String(x) + " Rot Y: " + String(y) + " Rot Z: " + String(z));
-    int16_t rotX = smoothAndMapAxis(x, true);
-    int16_t rotY = smoothAndMapAxis(y, true);
-    int16_t rotZ = smoothAndMapAxis(z, false);
-    if (isReadyPrint) printDebug("Smoothed Rot X: " + String(rotX) + " Smoothed Rot Y: " + String(rotY) + " Smoothed Rot Z: " + String(rotZ));
 
     if (Input.getVirtualPin(VPIN_PRECISION_SWITCH, false) == ON)
     {
-        if (PERCISION_MODIFIER > 0 && PERCISION_MODIFIER < 1)
+        // Only apply precision scaling to flight rotation controls (not when rotation button is held for camera/EVA)
+        if (Input.getVirtualPin(VPIN_ROTATION_BUTTON, false) == OFF)
         {
-            rotX *= PERCISION_MODIFIER;
-            rotY *= PERCISION_MODIFIER;
-            rotZ *= PERCISION_MODIFIER;
+            if (precisionModifier > 0 && precisionModifier < 1)
+            {
+                rotX *= precisionModifier;
+                rotY *= precisionModifier;
+                rotZ *= precisionModifier;
+            }
         }
     }
     
+    // Add trim offsets to joystick input with overflow protection
+    int32_t tempX = (int32_t)rotX + (int32_t)trimRotX;
+    int32_t tempY = (int32_t)rotY + (int32_t)trimRotY;
+    int32_t tempZ = (int32_t)rotZ + (int32_t)trimRotZ;
+    
+    // Clamp to valid range
+    rotX = (tempX > INT16_MAX) ? INT16_MAX : ((tempX < INT16_MIN) ? INT16_MIN : (int16_t)tempX);
+    rotY = (tempY > INT16_MAX) ? INT16_MAX : ((tempY < INT16_MIN) ? INT16_MIN : (int16_t)tempY);
+    rotZ = (tempZ > INT16_MAX) ? INT16_MAX : ((tempZ < INT16_MIN) ? INT16_MIN : (int16_t)tempZ);
+
+    // Apply roll sensitivity scaling to roll for less sensitive control (on final value)
+    // If we're not in atmosphere (space), give full roll authority and do NOT apply sensitivity.
+    if (atmoConditionsMsg.isVesselInAtmosphere())
+    {
+        rotX *= ROLL_SENSITIVITY;
+    }
+    
     rotationMessage rotMsg;
+    wheelMessage wheelMsg;
+    
     rotMsg.setPitchRollYaw(rotY, rotX, rotZ);
-    if (isConnectedToKSP) mySimpit.send(ROTATION_MESSAGE, rotMsg);
+    // Send wheel steering directly
+    wheelMsg.setSteer(smoothAndMapAxis(z, true)); // Negate to match expected direction
+    if (isConnectedToKSP) {
+        mySimpit.send(ROTATION_MESSAGE, rotMsg);
+        mySimpit.send(WHEEL_MESSAGE, wheelMsg);
+    }
 }
 
 // Display
 void setSpeedLCD()
 {
     // Speed
-    int speed;
-    // Clear the strings
+    float speed;
+    float verticalSpeed;
     String topTxt = "";
     String botTxt = "";
-    // Check the current speed mode to use and set the values for that mode
+    
+    // Check for overspeed and stall warnings
+    float surfaceSpeed = velocityMsg.surface;
+    float radarAlt = altitudeMsg.surface;
+    bool isOverspeed = (surfaceSpeed > 900.0 && radarAlt < 15000.0); // Match mod: 900 m/s, 15km altitude
+    
+    // Stall warning: only when under 100 mph (44.7 m/s) AND gear is up
+    // Subtract vertical velocity to get horizontal component (ignore vertical descent)
+    const float STALL_SPEED_MPH = 100.0;
+    const float STALL_SPEED_MS = STALL_SPEED_MPH * 0.44704; // 44.7 m/s
+    bool gearUp = !ag.isGear;
+    float vertSpeed = velocityMsg.vertical;
+    float horizontalSpeed = sqrt(max(0.0f, surfaceSpeed * surfaceSpeed - vertSpeed * vertSpeed));
+    bool isStall = (gearUp && horizontalSpeed < STALL_SPEED_MS);
+    
+    // Blink the display if overspeed or stall warning is active
+    bool blinkState = (millis() / 500) % 2; // Blink every 500ms
+
+    // Normal display when not blinking or no warnings
+    // Top line: Always show reference velocity based on current speed mode
     switch (currentSpeedMode)
     {
     case SPEED_SURFACE_MODE:
         speed = velocityMsg.surface;
-        topTxt += "Surface";
+        topTxt += "SRF-SPD ";
         break;
     case SPEED_ORBIT_MODE:
         speed = velocityMsg.orbital;
-        topTxt += "Orbit";
+        topTxt += "ORB-SPD ";
         break;
     case SPEED_TARGET_MODE:
         speed = targetMsg.velocity;
-        topTxt += "Target";
-        break;
-    case SPEED_VERTICAL_MODE:
-        speed = velocityMsg.vertical;
-        topTxt += "Vertical";
+        topTxt += "TGT-SPD ";
         break;
     default:
+        speed = 0;
+        topTxt += "--- ";
         break;
     }
-    // Speed txt
-    botTxt += "SPD ";
-    // Speed
-    botTxt += formatNumber(speed, 9, false, false);
-    // Add unit measurement
-    botTxt += "m/s";
+    // Convert speed to imperial if needed - only change units if number won't fit
+    String speedUnit = "m/s";
+    if (useImperialUnits) {
+        // Convert m/s to mph for imperial display
+        speed *= 2.23693629; // m/s to mph
+        speedUnit = "mph";
+        // Only use mi/s if mph won't fit (>99999)
+        if (abs(speed) >= 99999.0) {
+            speed /= 3600.0; // Convert mph to mi/s
+            speedUnit = "mi/s";
+            topTxt += formatNumber(speed, 4, true, false);
+        } else {
+            topTxt += formatNumber(speed, 5, true, false);
+        }
+    } else {
+        // Metric: only use km/s if m/s won't fit (>9999)
+        if (abs(speed) >= 9999.0) {
+            speed /= 1000.0; // Convert m/s to km/s
+            speedUnit = "km/s";
+            topTxt += formatNumber(speed, 4, true, false);
+        } else {
+            topTxt += formatNumber(speed, 5, true, false);
+        }
+    }
+    topTxt += speedUnit;
+
+    // Bottom line: Always show vertical velocity - only change units if won't fit
+    verticalSpeed = velocityMsg.vertical;
+    String vertUnit = "m/s";
+    if (useImperialUnits) {
+        // Use mph for vertical/horizontal consistency
+        verticalSpeed *= 2.23693629; // m/s to mph
+        vertUnit = "mph";
+        // Only use mi/s if mph won't fit (>99999)
+        if (abs(verticalSpeed) >= 99999.0) {
+            verticalSpeed /= 3600.0; // Convert mph to mi/s
+            vertUnit = "mi/s";
+            botTxt += "VRT-SPD ";
+            botTxt += formatNumber(verticalSpeed, 4, true, false);
+        } else {
+            botTxt += "VRT-SPD ";
+            botTxt += formatNumber(verticalSpeed, 5, true, false);
+        }
+    } else {
+        // Metric: only use km/s if m/s won't fit (>9999)
+        if (abs(verticalSpeed) >= 9999.0) {
+            verticalSpeed /= 1000.0; // Convert m/s to km/s
+            vertUnit = "km/s";
+            botTxt += "VRT-SPD ";
+            botTxt += formatNumber(verticalSpeed, 4, true, false);
+        } else {
+            botTxt += "VRT-SPD ";
+            botTxt += formatNumber(verticalSpeed, 5, true, false);
+        }
+    }
+    botTxt += vertUnit;
+
+    // Replace bottom line with warning if active and blinking
+    if ((isOverspeed || isStall) && blinkState)
+    {
+        if (isOverspeed)
+        {
+            // Show OVERSPEED on bottom line with proper units
+            float displaySpeed = surfaceSpeed;
+            String speedUnit = "m/s";
+            if (useImperialUnits) {
+                displaySpeed *= 2.23693629; // m/s to mph
+                speedUnit = "mph";
+            }
+            botTxt = "OVERSPEED " + formatNumber(displaySpeed, 5, true, false) + speedUnit;
+        }
+        else if (isStall)
+        {
+            // Show STALL on bottom line with proper units
+            float displaySpeed = surfaceSpeed;
+            String speedUnit = "m/s";
+            if (useImperialUnits) {
+                displaySpeed *= 2.23693629; // m/s to mph
+                speedUnit = "mph";
+            }
+            botTxt = "STALL " + formatNumber(displaySpeed, 5, true, false) + speedUnit;
+        }
+    }
 
     Output.setSpeedLCD(topTxt, botTxt);
 }
 void setAltitudeLCD()
 {
-    // Alt
-    int altitude;
-    // Clear the strings
+    
     String topTxt = "";
     String botTxt = "";
-    // Calculate gap for soi name
-    // No SOI names are more than 7 char, which is good because that is the exact amount of room at max on the lcd.
-    topTxt += calculateGap("", 7);//soi, 7);
-    // Check altitude mode (ON = radar/land, OFF = sea level)
-    if (Input.getVirtualPin(VPIN_RADAR_ALTITUDE_SWITCH, false) == ON) // LAND/RADAR
-    {
-        topTxt += "     Land";
-        altitude = altitudeMsg.surface;
-    }
-    else // SEA LEVEL
-    {
-        topTxt += "      Sea";
-        altitude = altitudeMsg.sealevel;
-    }
-    // Alt txt
-    botTxt += "ALT";
-    if (altitude >= 1000000)
-    {
-        altitude = getKilometers(altitude);
-        botTxt += formatNumber(altitude, 12, true, false);
-        botTxt += "k";
-    }
+
+    // Top line: SOI name
+    String soiName = (soi.length() > 0) ? soi : "Unknown";
+    String atmLabel = atmoConditionsMsg.isVesselInAtmosphere() ? "ATMOS" : "VACUUM";
+    topTxt = calculateGap(soiName, 16 - atmLabel.length());
+    topTxt += atmLabel;
+
+    // Bottom left: Radar or Sea label; Bottom right: altitude value (right-aligned)
+    bool radarMode = (Input.getVirtualPin(VPIN_RADAR_ALTITUDE_SWITCH, false) == ON);
+    if (radarMode)
+        botTxt = "ALT-RAD ";
     else
-    {
-        botTxt += formatNumber(altitude, 12, true, false);
-        botTxt += "m";
+        botTxt = "ALT-SEA ";
+
+    // Choose altitude value and unit - only change units if number won't fit
+    if (useImperialUnits) {
+        float alt = radarMode ? altitudeMsg.surface : altitudeMsg.sealevel;
+        float feet = alt * 3.28084;
+        // Only use miles if feet won't fit (>999999 ft)
+        if (feet >= 999999.0) {
+            float miles = alt / 1609.34;
+            // Show miles with 1 decimal place
+            botTxt += formatNumber((int)miles, 4, true, false);
+            botTxt += ".";
+            int decimal = (int)((miles - (int)miles) * 10);
+            botTxt += String(decimal);
+            botTxt += "mi";
+        } else {
+            botTxt += formatNumber((int)feet, 6, true, false);
+            botTxt += "ft";
+        }
+    } else {
+        float alt = radarMode ? altitudeMsg.surface : altitudeMsg.sealevel;
+        // Only use Mm if km won't fit (>999999 km = 999999000 m)
+        if (alt >= 999999000.0) {
+            int altMm = (int)(alt / 1000000.0);
+            botTxt += formatNumber(altMm, 5, true, false);
+            botTxt += "Mm";
+        } else if (alt >= 9999.0) { // Only use km if m won't fit (>9999 m)
+            int altKm = (int)(alt / 1000.0);
+            botTxt += formatNumber(altKm, 6, true, false);
+            botTxt += "km";
+        } else {
+            botTxt += formatNumber((int)alt, 7, true, false);
+            botTxt += "m";
+        }
     }
+
     Output.setAltitudeLCD(topTxt, botTxt);
 }
 void setInfoLCD()
 {
     String topTxt = "";
     String botTxt = "";
-    
+    // Helper: prefer fullLabel+value if it fits in 16 chars, otherwise use abbrev+value or value only
+    auto composeLabelValue = [](const String &fullLabel, const String &abbrev, const String &value)->String {
+        String cand = fullLabel;
+        if (value.length() > 0) {
+            cand += " ";
+            cand += value;
+        }
+        if (cand.length() <= 16) return cand;
+
+        cand = abbrev;
+        if (value.length() > 0) {
+            cand += " ";
+            cand += value;
+        }
+        if (cand.length() <= 16) return cand;
+
+        // Fallback: value only (or truncated)
+        if (value.length() <= 16) return value;
+        return value.substring(0, 16);
+    };
+
+    // Small helpers to format distances and speeds according to unit preference
+    // Only convert units if the number won't fit in base units
+    auto formatDistance = [&](float meters)->String {
+        if (useImperialUnits) {
+            int feet = (int)(meters * 3.28084);
+            // Only use miles if feet won't fit (>99999 ft)
+            if (feet > 99999) {
+                float miles = meters / 1609.34;
+                int whole = (int)miles;
+                int frac = (int)(miles * 10) % 10;
+                return String(whole) + "." + String(frac) + "mi";
+            } else {
+                return String(feet) + "ft";
+            }
+        } else {
+            int m = (int)meters;
+            // Only use km if meters won't fit (>99999 m)
+            if (m > 99999) {
+                int km = getKilometers((int)meters);
+                return String(km) + "km";
+            } else {
+                return String(m) + "m";
+            }
+        }
+    };
+
+    auto formatSpeed = [&](float mps)->String {
+        if (useImperialUnits) {
+            int mph = (int)round(mps * 2.23693629);
+            // Only convert if mph won't fit (>99999)
+            if (mph > 99999) {
+                float mps_imp = mph / 3600.0;
+                return String((int)mps_imp) + " mi/s";
+            } else {
+                return String(mph) + " mph";
+            }
+        } else {
+            int ms = (int)round(mps);
+            // Only convert if m/s won't fit (>9999)
+            if (ms > 9999) {
+                float kms = mps / 1000.0;
+                return String((int)kms) + " km/s";
+            } else {
+                return String(ms) + " m/s";
+            }
+        }
+    };
+
     // Display data based on current info mode (1-12)
     switch (infoMode)
     {
-        case 1:  // Apoapsis Time
-            topTxt = "Time to Ap";
+        case 1:  // Apoapsis Time and Altitude
+        {
+            topTxt = "Ap ";
+            float apAltMeters = (float)apsidesMsg.apoapsis; // meters
+            String altStr = formatDistance(apAltMeters);
+            // Right-align value area (reserve 13 chars)
+            topTxt += calculateGap(altStr, 13);
+            topTxt += altStr;
+
             if (apsidesTimeMsg.apoapsis >= 0)
             {
                 int timeToAp = apsidesTimeMsg.apoapsis;
                 int hours = timeToAp / 3600;
                 int minutes = (timeToAp % 3600) / 60;
                 int seconds = timeToAp % 60;
+                String timeStr;
                 if (hours > 0)
-                    botTxt = String(hours) + "h " + String(minutes) + "m";
+                    timeStr = String(hours) + "h " + String(minutes) + "m";
                 else
-                    botTxt = String(minutes) + "m " + String(seconds) + "s";
+                    timeStr = String(minutes) + "m " + String(seconds) + "s";
+                botTxt = "Time to " + timeStr;
             }
             else
-                botTxt = "N/A";
+                botTxt = "Time to N/A";
             break;
-            
-        case 2:  // Periapsis Time
-            topTxt = "Time to Pe";
+        }
+
+        case 2:  // Periapsis Time and Altitude
+        {
+            topTxt = "Pe ";
+            float peAltMeters = (float)apsidesMsg.periapsis; // meters (can be negative)
+            String altStr = formatDistance(abs(peAltMeters));
+            topTxt += calculateGap(altStr, 13);
+            topTxt += altStr;
+
             if (apsidesTimeMsg.periapsis >= 0)
             {
                 int timeToPe = apsidesTimeMsg.periapsis;
                 int hours = timeToPe / 3600;
                 int minutes = (timeToPe % 3600) / 60;
                 int seconds = timeToPe % 60;
+                String timeStr;
                 if (hours > 0)
-                    botTxt = String(hours) + "h " + String(minutes) + "m";
+                    timeStr = String(hours) + "h " + String(minutes) + "m";
                 else
-                    botTxt = String(minutes) + "m " + String(seconds) + "s";
+                    timeStr = String(minutes) + "m " + String(seconds) + "s";
+                botTxt = "Time to " + timeStr;
             }
             else
-                botTxt = "N/A";
+                botTxt = "Time to N/A";
             break;
-            
-        case 3:  // Time to Maneuver
-            topTxt = "Time to Node";
-            if (maneuverMsg.timeToNextManeuver >= 0)
+        }
+
+        case 3:  // Time to Node and Node DeltaV (combined)
+            if (maneuverMsg.timeToNextManeuver >= 0 && maneuverMsg.deltaVNextManeuver > 0)
             {
+                // Top line: Time to node
                 int timeToNode = (int)maneuverMsg.timeToNextManeuver;
                 int hours = timeToNode / 3600;
                 int minutes = (timeToNode % 3600) / 60;
                 int seconds = timeToNode % 60;
+                String timeStr;
                 if (hours > 0)
-                    botTxt = String(hours) + "h " + String(minutes) + "m";
+                    timeStr = String(hours) + "h " + String(minutes) + "m";
                 else
-                    botTxt = String(minutes) + "m " + String(seconds) + "s";
+                    timeStr = String(minutes) + "m " + String(seconds) + "s";
+                topTxt = "Node " + timeStr;
+                
+                // Bottom line: DeltaV
+                botTxt = "dV " + formatSpeed(maneuverMsg.deltaVNextManeuver);
             }
             else
+            {
+                topTxt = "Maneuver Node";
                 botTxt = "No Node";
+            }
             break;
-            
-        case 4:  // Maneuver DeltaV
-            topTxt = "Node DeltaV";
+
+        case 4:  // Node DeltaV and Burn Time (combined)
             if (maneuverMsg.deltaVNextManeuver > 0)
-                botTxt = String((int)maneuverMsg.deltaVNextManeuver) + " m/s";
+            {
+                // Top line: DeltaV
+                topTxt = "dV " + formatSpeed(maneuverMsg.deltaVNextManeuver);
+                
+                // Bottom line: Burn time
+                if (burnTimeMsg.stageBurnTime > 0)
+                {
+                    int burnTime = (int)burnTimeMsg.stageBurnTime;
+                    int minutes = burnTime / 60;
+                    int seconds = burnTime % 60;
+                    if (minutes > 0)
+                        botTxt = "Burn " + String(minutes) + "m " + String(seconds) + "s";
+                    else
+                        botTxt = "Burn " + String(seconds) + "s";
+                }
+                else
+                {
+                    botTxt = "Burn N/A";
+                }
+            }
             else
+            {
+                topTxt = "Node DeltaV";
                 botTxt = "No Node";
+            }
             break;
-            
-        case 5:  // Orbit Period
-            topTxt = "Orbit Period";
+
+        case 5:  // Orbit Period + Eccentricity (paired)
+        {
+            // Build time string
+            String timeStr = "N/A";
             if (orbitInfoMsg.period > 0)
             {
                 int period = (int)orbitInfoMsg.period;
                 int hours = period / 3600;
                 int minutes = (period % 3600) / 60;
+                int seconds = period % 60;
+                String periodStr;
                 if (hours > 0)
-                    botTxt = String(hours) + "h " + String(minutes) + "m";
+                    timeStr = String(hours) + "h " + String(minutes) + "m";
+                else if (minutes > 0)
+                    timeStr = String(minutes) + "m " + String(seconds) + "s";
                 else
-                    botTxt = String(minutes) + "m " + String(period % 60) + "s";
+                    timeStr = String(seconds) + "s";
             }
-            else
-                botTxt = "No Orbit";
+
+            String eccStr = String(orbitInfoMsg.eccentricity, 3);
+
+            // Prefer full words if they fit, otherwise use short labels
+            topTxt = composeLabelValue("Orbit Period", "PRD      ", timeStr);
+            botTxt = composeLabelValue("Eccentricity", "Ecc       ", eccStr);
             break;
-            
-        case 6:  // Eccentricity
-            topTxt = "Eccentricity";
-            botTxt = String(orbitInfoMsg.eccentricity, 3);
+        }
+
+        case 6:  // LAN + Arg Periapsis (paired)
+        {
+            String lanStr = formatNumber((int)orbitInfoMsg.longAscendingNode, 11, false, false);
+            lanStr += DEGREE_CHAR_LCD;
+            String argStr = formatNumber((int)orbitInfoMsg.argPeriapsis, 6, false, false);
+            argStr += DEGREE_CHAR_LCD;
+
+            topTxt = composeLabelValue("Long Asc Node", "LAN", lanStr);
+            botTxt = composeLabelValue("Arg Peri", "ARG", argStr);
             break;
-            
-        case 7:  // Inclination
-            topTxt = "Inclination";
-            botTxt = String((int)orbitInfoMsg.inclination) + DEGREE_CHAR_LCD;
+        }
+
+        case 7:  // Inclination + Ejection angle (true anomaly) (paired)
+        {
+            String incStr = formatNumber((int)orbitInfoMsg.inclination, 3, false, false);
+            incStr += DEGREE_CHAR_LCD;
+            String ejStr = formatNumber((int)orbitInfoMsg.trueAnomaly, 6, false, false);
+            ejStr += DEGREE_CHAR_LCD;
+
+            topTxt = composeLabelValue("Inclination", "INC", incStr);
+            botTxt = composeLabelValue("Ejection", "EJ", ejStr);
             break;
-            
-        case 8:  // Total DeltaV
-            topTxt = "Total DeltaV";
-            if (deltaVMsg.totalDeltaV >= 1000)
-                botTxt = String((int)(deltaVMsg.totalDeltaV / 1000)) + "." + String((int)(deltaVMsg.totalDeltaV) % 1000 / 100) + "k m/s";
-            else
-                botTxt = String((int)deltaVMsg.totalDeltaV) + " m/s";
-            break;
-            
-        case 9:  // Stage DeltaV
-            topTxt = "Stage DeltaV";
-            if (deltaVMsg.stageDeltaV >= 1000)
-                botTxt = String((int)(deltaVMsg.stageDeltaV / 1000)) + "." + String((int)(deltaVMsg.stageDeltaV) % 1000 / 100) + "k m/s";
-            else
-                botTxt = String((int)deltaVMsg.stageDeltaV) + " m/s";
-            break;
-            
-        case 10:  // Burn Time
-            topTxt = "Burn Time";
-            if (burnTimeMsg.stageBurnTime > 0)
+        }
+
+        case 8: // Remaining Flight Time (fuel-based)
             {
-                int burnTime = (int)burnTimeMsg.stageBurnTime;
-                int minutes = burnTime / 60;
-                int seconds = burnTime % 60;
-                if (minutes > 0)
-                    botTxt = String(minutes) + "m " + String(seconds) + "s";
+                // Top line: Time remaining at current burn rate
+                float burnTime = burnTimeMsg.stageBurnTime; // seconds
+                if (burnTime > 0)
+                {
+                    int hours = (int)burnTime / 3600;
+                    int minutes = ((int)burnTime % 3600) / 60;
+                    int seconds = (int)burnTime % 60;
+                    
+                    String timeStr;
+                    if (hours > 0)
+                        timeStr = String(hours) + "h " + String(minutes) + "m";
+                    else if (minutes > 0)
+                        timeStr = String(minutes) + "m " + String(seconds) + "s";
+                    else
+                        timeStr = String(seconds) + "s";
+                    topTxt = "Burn Time " + timeStr;
+                    
+                    // Bottom line: Distance possible at current speed with remaining fuel
+                    float currentSpeed = velocityMsg.surface; // m/s
+                    if (currentSpeed > 1.0)
+                    {
+                        float distancePossible = burnTime * currentSpeed; // meters
+                        botTxt = "Range " + formatDistance(distancePossible);
+                    }
+                    else
+                    {
+                        botTxt = "Not Moving";
+                    }
+                }
                 else
-                    botTxt = String(seconds) + "s";
+                {
+                    topTxt = "Burn Time";
+                    botTxt = "No Fuel Flow";
+                }
             }
-            else
-                botTxt = "N/A";
             break;
-            
-        case 11:  // Target Distance
-            topTxt = "Target Dist";
+
+        case 9: // DeltaV (single mode, toggles between Total/Stage based on stage view switch)
+        {
+            bool stageView = (Input.getVirtualPin(VPIN_STAGE_VIEW_SWITCH, false) == ON);
+            float dv = stageView ? deltaVMsg.stageDeltaV : deltaVMsg.totalDeltaV;
+            topTxt = stageView ? "Stage DeltaV" : "Total DeltaV";
+            botTxt = formatSpeed(dv);
+            break;
+        }
+
+        case 10:  // Landing Time Estimate
+            topTxt = "Landing Time";
+            {
+                float verticalSpeed = velocityMsg.vertical;
+                float surfaceAlt = altitudeMsg.surface;
+                
+                // Only show estimate if descending (negative vertical speed) and above ground
+                if (verticalSpeed < -1.0 && surfaceAlt > 0)
+                {
+                    // Time to impact = altitude / abs(vertical speed)
+                    int timeToLanding = (int)(surfaceAlt / -verticalSpeed);
+                    int minutes = timeToLanding / 60;
+                    int seconds = timeToLanding % 60;
+                    
+                    if (minutes > 0)
+                        botTxt = String(minutes) + "m " + String(seconds) + "s";
+                    else
+                        botTxt = String(seconds) + "s";
+                }
+                else if (verticalSpeed >= 0)
+                {
+                    botTxt = "Ascending";
+                }
+                else
+                {
+                    botTxt = "On Ground";
+                }
+            }
+            break;
+
+        case 11:  // Target Distance and Velocity (combined)
             if (targetMsg.distance > 0)
             {
-                if (targetMsg.distance >= 1000000)
-                    botTxt = String((int)(targetMsg.distance / 1000)) + " km";
-                else if (targetMsg.distance >= 1000)
-                    botTxt = String((int)(targetMsg.distance / 1000)) + "." + String((int)(targetMsg.distance) % 1000 / 100) + " km";
-                else
-                    botTxt = String((int)targetMsg.distance) + " m";
+                // Top line: Target distance
+                topTxt = "TGT " + formatDistance(targetMsg.distance);
+                
+                // Bottom line: Target velocity
+                botTxt = "Vel " + formatSpeed(targetMsg.velocity);
             }
             else
+            {
+                topTxt = "Target Info";
                 botTxt = "No Target";
+            }
             break;
+
+        case 12:  // TWR, ISP, Thrust info
+        {
+            // Note: KSP doesn't provide direct TWR, ISP, or Thrust via Simpit
+            // We can calculate TWR if we had mass and thrust data
+            // For now, show DeltaV info and burn time as closest available metrics
+            float stageDV = deltaVMsg.stageDeltaV;
+            float totalDV = deltaVMsg.totalDeltaV;
             
-        case 12:  // Target Velocity
-            topTxt = "Target Vel";
-            if (targetMsg.velocity != 0)
-                botTxt = String((int)targetMsg.velocity) + " m/s";
-            else
-                botTxt = "No Target";
+            // Top line: Stage and Total DeltaV - only convert to k if too large
+            topTxt = "DV ";
+            String stageStr, totalStr;
+            
+            // Try to fit stage DV in m/s first
+            if (stageDV < 10000.0) {
+                stageStr = String((int)stageDV);
+            } else {
+                // Only use k notation if >= 10000
+                stageStr = String((int)(stageDV / 1000.0)) + "." + String(((int)stageDV % 1000) / 100) + "k";
+            }
+            
+            // Try to fit total DV in m/s first
+            if (totalDV < 10000.0) {
+                totalStr = String((int)totalDV);
+            } else {
+                // Only use k notation if >= 10000
+                totalStr = String((int)(totalDV / 1000.0)) + "." + String(((int)totalDV % 1000) / 100) + "k";
+            }
+            
+            topTxt += stageStr + "/" + totalStr;
+            
+            // Only add unit if there's room (16 chars total)
+            if (topTxt.length() <= 11) {
+                topTxt += " m/s";
+            }
+            
+            // Bottom line: Burn time if available
+            float burnTime = burnTimeMsg.stageBurnTime;
+            if (burnTime > 0) {
+                int minutes = (int)burnTime / 60;
+                int seconds = (int)burnTime % 60;
+                if (minutes > 0)
+                    botTxt = "Burn " + String(minutes) + "m " + String(seconds) + "s";
+                else
+                    botTxt = "Burn " + String(seconds) + "s";
+            } else {
+                botTxt = "TWR/ISP/Thr N/A";
+            }
             break;
-            
+        }
+
         default:
             topTxt = "Info Mode";
             botTxt = "Select Mode";
             break;
     }
-    
+
     Output.setInfoLCD(topTxt, botTxt);
 }
 void setHeadingLCD()
 {
-    
     String topTxt = "";
     String botTxt = "";
 
-    topTxt += "Heading "; // DO like a north,east,wesst,south here instead of "Heading "
-    // Heading txt
-    topTxt += " HDG+";
-    topTxt += formatNumber(vesselPointingMsg.heading, 3, false, false);
-    topTxt += DEGREE_CHAR_LCD;
-    // Pitch txt
-    botTxt += "PTH";
-    botTxt += formatNumber(vesselPointingMsg.pitch, 3, true, false);
+    // Top line: Roll value, Compass direction, and G-force
+    // Build left portion (roll) - negated so negative is left
+    String left = "RLL ";
+    left += formatNumber((int)(-vesselPointingMsg.roll), 3, true, false);
+    left += DEGREE_CHAR_LCD;
+
+    // Compass direction (N, NE, E, SE, S, SW, W, NW)
+    String compass = getCardinalDirection((int)vesselPointingMsg.heading);
+    
+    // G-force from airspeed message (display as X.XG)
+    float gforce = airspeedMsg.gForces;
+    String gStr = String(gforce, 1) + "G";
+
+    // Build top line: "RLL +XXX° CCC X.XG" (compass before G-force)
+    String right = compass + " " + gStr;
+    int spaceForLeft = 16 - right.length();
+    if (spaceForLeft < 0) spaceForLeft = 0;
+    if (left.length() > (unsigned int)spaceForLeft) left = left.substring(0, spaceForLeft);
+    topTxt = calculateGap(left, spaceForLeft) + right;
+    
+    // Bottom line: Heading (left) and Pitch (right)
+    botTxt = "HDG ";
+    botTxt += formatNumber(vesselPointingMsg.heading, 3, false, false);
     botTxt += DEGREE_CHAR_LCD;
-    // Roll txt
-    botTxt += " RLL";
-    botTxt += formatNumber(vesselPointingMsg.roll, 4, true, true);
+    botTxt += " PTH";
+    botTxt += formatNumber(vesselPointingMsg.pitch, 3, true, false);
     botTxt += DEGREE_CHAR_LCD;
 
     Output.setHeadingLCD(topTxt, botTxt);
@@ -2161,69 +3214,94 @@ void setDirectionLCD()
     switch (directionMode)
     {
         case 1:  // Maneuver Node
-            topTxt = "MVR";
+            topTxt = "Maneuver Mode";
             heading = maneuverMsg.headingNextManeuver;
             pitch = maneuverMsg.pitchNextManeuver;
             break;
         case 2:  // Prograde (orbital velocity)
-            topTxt = "PGD";
+            topTxt = "Prograde";
             heading = vesselPointingMsg.orbitalVelocityHeading;
             pitch = vesselPointingMsg.orbitalVelocityPitch;
             break;
         case 3:  // Retrograde (opposite of prograde)
-            topTxt = "RGD";
+            topTxt = "Retrograde";
             heading = vesselPointingMsg.orbitalVelocityHeading + 180.0;
             if (heading >= 360.0) heading -= 360.0;
             pitch = -vesselPointingMsg.orbitalVelocityPitch;
             break;
         case 4:  // Normal (perpendicular to orbital plane, +90 pitch from prograde)
-            topTxt = "NOR";
+            topTxt = "Normal";
             heading = vesselPointingMsg.orbitalVelocityHeading + 90.0;
             if (heading >= 360.0) heading -= 360.0;
             pitch = 0;  // Normal is perpendicular to orbital plane
             break;
         case 5:  // Anti-Normal (opposite of normal)
-            topTxt = "A-NOR";
+            topTxt = "Anti-Normal";
             heading = vesselPointingMsg.orbitalVelocityHeading - 90.0;
             if (heading < 0.0) heading += 360.0;
             pitch = 0;
             break;
         case 6:  // Radial In (toward planet center)
-            topTxt = "RAD-I";
+            topTxt = "Radial In";
             heading = vesselPointingMsg.orbitalVelocityHeading;
             pitch = -90;  // Radial in points down
             break;
         case 7:  // Radial Out (away from planet center)
-            topTxt = "RAD-O";
+            topTxt = "Radial Out";
             heading = vesselPointingMsg.orbitalVelocityHeading;
             pitch = 90;  // Radial out points up
             break;
         case 8:  // Target
-            topTxt = "TAR";
+            topTxt = "Target";
             heading = targetMsg.heading;
             pitch = targetMsg.pitch;
             break;
-        case 9:  // Anti-Target (opposite of target)
-            topTxt = "A-TAR";
+        case 9:  // Combined: Anti-Target and Velocity (based on reference mode)
+            topTxt = "Anti-Target";
             heading = targetMsg.heading + 180.0;
             if (heading >= 360.0) heading -= 360.0;
             pitch = -targetMsg.pitch;
             break;
-        case 10:  // Surface Velocity
-            topTxt = "SRF-V";
-            heading = vesselPointingMsg.surfaceVelocityHeading;
-            pitch = vesselPointingMsg.surfaceVelocityPitch;
+        case 10:  // Velocity direction based on current reference mode
+            // Show surface or orbital velocity based on speed mode
+            if (currentSpeedMode == SPEED_SURFACE_MODE)
+            {
+                topTxt = "Surface Velocity";
+                heading = vesselPointingMsg.surfaceVelocityHeading;
+                pitch = vesselPointingMsg.surfaceVelocityPitch;
+            }
+            else  // SPEED_ORBIT_MODE or SPEED_TARGET_MODE - use orbital
+            {
+                topTxt = "Orbital Velocity";
+                heading = vesselPointingMsg.orbitalVelocityHeading;
+                pitch = vesselPointingMsg.orbitalVelocityPitch;
+            }
             break;
-        case 11:  // Orbital Velocity (same as prograde but labeled differently)
-            topTxt = "ORB-V";
-            heading = vesselPointingMsg.orbitalVelocityHeading;
-            pitch = vesselPointingMsg.orbitalVelocityPitch;
-            break;
-        case 12:  // North Heading (0 degrees, level)
-            topTxt = "NORTH";
-            heading = 0;
-            pitch = 0;
-            break;
+        case 11:  // Autopilot Status
+            if (autopilotEnabled)
+            {
+                // Show autopilot target values with prograde indicator
+                topTxt = "AP PG:" + String((int)autopilotHeading);
+                topTxt += " " + String((int)autopilotSpeed) + "m/s";
+                
+                // Show altitude target and current error
+                float currentAlt = altitudeMsg.sealevel;
+                float altErr = autopilotAltitude - currentAlt;
+                botTxt = "ALT:" + String((int)autopilotAltitude);
+                botTxt += " E:" + String((int)altErr) + "m";
+            }
+            else
+            {
+                topTxt = "Autopilot";
+                botTxt = "Disabled";
+            }
+            Output.setDirectionLCD(topTxt, botTxt);
+            return;
+        case 12:  // Unused
+            topTxt = "Direction 12";
+            botTxt = "Unused";
+            Output.setDirectionLCD(topTxt, botTxt);
+            return;
         default:
             topTxt = "Direction";
             botTxt = "Select Mode";
@@ -2231,37 +3309,72 @@ void setDirectionLCD()
             return;
     }
     
-    // Format top line: Mode name + Heading
-    topTxt += " HDG";
-    topTxt += formatNumber((int)heading, 3, false, false);
-    topTxt += DEGREE_CHAR_LCD;
+    // Format top line: Mode name centered/left-aligned (like "Surface", "Orbit", etc.)
+    // Pad mode name to match the style of Speed/Altitude displays
+    String modeName = topTxt;
+    topTxt = modeName;  // Keep mode name simple on top line
     
-    // Format bottom line: Pitch
-    botTxt = "PTH";
+    // Format bottom line: "HDG" + heading + "PTH" + pitch (all on one line)
+    botTxt = "HDG ";
+    botTxt += formatNumber((int)heading, 3, false, false);
+    botTxt += DEGREE_CHAR_LCD;
+    botTxt += " PTH";
     botTxt += formatNumber((int)pitch, 3, true, false);
     botTxt += DEGREE_CHAR_LCD;
     
     Output.setDirectionLCD(topTxt, botTxt);
 }
 
-#pragma region Tools
+
+
 
 /// <summary>Give the raw analog some smoothing.</summary>
 /// <returns>Returns a smoothed and mapped value.</returns>
 int16_t smoothAndMapAxis(int raw, bool flip)//, bool isSmooth = true)
 {
-    // Map the raw data for simpit (0 - 1023 to INT16_MIN to INT16_MAX)
-    if (raw < 0) raw = 0;
-    else if (raw > 1023) raw = 1023;
-
-    if (raw < 512 + JOYSTICK_DEADZONE && raw > 512 - JOYSTICK_DEADZONE)
+    // Check center deadzone first
+    if (raw > 512 - JOYSTICK_DEADZONE_CENTER && raw < 512 + JOYSTICK_DEADZONE_CENTER)
     {
-        // Within deadzone - return zero (center position)
+        // Within center deadzone - return zero
         return 0;
     }
 
-    if (!flip) return map(raw, 0, 1023, INT16_MIN, INT16_MAX);
-    else return map(raw, 0, 1023, INT16_MAX, INT16_MIN);
+    // Apply edge deadzone and map the value
+    // For values outside center deadzone, map from edge of center deadzone to edges
+    int min = JOYSTICK_DEADZONE;
+    int max = 1023 - JOYSTICK_DEADZONE;
+    int centerMin = 512 - JOYSTICK_DEADZONE_CENTER;
+    int centerMax = 512 + JOYSTICK_DEADZONE_CENTER;
+    
+    // Map lower range (min to centerMin) to (INT16_MIN to 0)
+    // When pulling back (raw decreasing from 512), output should go negative
+    if (raw < 512)
+    {
+        if (raw < min) raw = min;
+        if (raw > centerMin) raw = centerMin;
+        // Raw decreases from centerMin to min, output should go from 0 to INT16_MIN
+        if (!flip) return map(raw, centerMin, min, 0, INT16_MIN);
+        else return map(raw, centerMin, min, 0, INT16_MAX);
+    }
+    // Map upper range (centerMax to max) to (0 to INT16_MAX)
+    // When pushing forward (raw increasing from 512), output should go positive
+    else
+    {
+        if (raw < centerMax) raw = centerMax;
+        if (raw > max) raw = max;
+        // Raw increases from centerMax to max, output should go from 0 to INT16_MAX
+        if (!flip) return map(raw, centerMax, max, 0, INT16_MAX);
+        else return map(raw, centerMax, max, 0, INT16_MIN);
+    }
+}
+
+// Helper: shortest signed angle difference (target - current) in degrees (-180..180]
+float shortestAngleDiff(float target, float current)
+{
+    float d = target - current;
+    while (d > 180.0f) d -= 360.0f;
+    while (d <= -180.0f) d += 360.0f;
+    return d;
 }
 
 void calcResource(float total, float avail, bool* newLEDs)
@@ -2287,6 +3400,25 @@ void calcResource(float total, float avail, bool* newLEDs)
             newLEDs[i] = false;
     }
 }
+/// <summary>Convert heading degrees to cardinal direction (N, NE, E, SE, S, SW, W, NW)</summary>
+/// <returns>Returns a cardinal direction string</returns>
+String getCardinalDirection(int heading)
+{
+    // Normalize heading to 0-359
+    heading = heading % 360;
+    if (heading < 0) heading += 360;
+    
+    // 8 cardinal directions, each covers 45 degrees
+    // N: 337.5-22.5, NE: 22.5-67.5, E: 67.5-112.5, SE: 112.5-157.5 // S: 157.5-202.5, SW: 202.5-247.5, W: 247.5-292.5, NW: 292.5-337.5
+    if (heading < 22.5 || heading >= 337.5) return "N";
+    else if (heading < 67.5) return "NE";
+    else if (heading < 112.5) return "E";
+    else if (heading < 157.5) return "SE";
+    else if (heading < 202.5) return "S";
+    else if (heading < 247.5) return "SW";
+    else if (heading < 292.5) return "W";
+    else return "NW";
+}
 
 /// <summary>Format numbers for lcd. Length max is 16 characters.This will fit a number to a character range,
 /// the number will be to the right of the excess characters. 
@@ -2300,7 +3432,7 @@ String formatNumber(int number, byte lengthReq, bool canBeNegative, bool flipNeg
     bool isNegative = number < 0 ? true : false;
     // If should flip the polarity, Does not flip if the number is a zero (fix for causing zero to go negative)
     if (flipNegative && number != 0) isNegative = !isNegative;
-    // Check length
+    // Check length (32-bit int max is ~2.1 billion, so we only check up to 1 billion)
     if (num < 10) lengthReq -= 1; // 1 characters
     else if (num < 100) lengthReq -= 2; // 2 characters
     else if (num < 1000) lengthReq -= 3; // 3 characters
@@ -2310,13 +3442,7 @@ String formatNumber(int number, byte lengthReq, bool canBeNegative, bool flipNeg
     else if (num < 10000000) lengthReq -= 7; // 7 characters
     else if (num < 100000000) lengthReq -= 8; // 8 characters
     else if (num < 1000000000) lengthReq -= 9; // 9 characters
-    else if (num < 10000000000) lengthReq -= 10; // 10 characters
-    else if (num < 100000000000) lengthReq -= 11; // 11 characters
-    else if (num < 1000000000000) lengthReq -= 12; // 12 characters
-    else if (num < 10000000000000) lengthReq -= 13; // 13 characters
-    else if (num < 100000000000000) lengthReq -= 14; // 14 characters
-    else if (num < 1000000000000000) lengthReq -= 15; // 15 characters
-    else if (num < 10000000000000000) lengthReq -= 16; // 16 characters
+    else lengthReq -= 10; // 10 characters (max for 32-bit int: 2147483647)
 
     String str;
     for (size_t i = 0; i < lengthReq; i++)
@@ -2339,7 +3465,7 @@ String calculateGap(String includedTxt, int idealLength)
     int gap = idealLength - includedTxt.length();
     if (gap < 0) return "";
     String str;
-    for (size_t i = 0; i < gap; i++)
+    for (size_t i = 0; i < (unsigned int)gap; i++)
     {
         str += " ";
     }
@@ -2355,7 +3481,6 @@ int getKilometers(int meters)
     // Round and return
     return round(km);
 }
-
 /// <summary>
 /// Find a vertain value using the percentage of a number.
 /// </summary>
@@ -2378,17 +3503,42 @@ double getPercent(double total, double val)
     if (total <= 0) return 0;
     return (val / total) * 100;
 }
+int16_t dualPlayerHelper(int16_t x1, int16_t x2)
+{
+    int16_t x;
+    if (x1  == 0 && x2 == 0) // Both zero
+    {
+        x = 0;
+    } 
+    else if (x1 == 0 && x2 != 0) // Use x2
+    {
+        x = x2;
+    }
+    else if (x2 == 0 && x1 != 0) // Use x1
+    {
+        x = x1;
+    }
+    else if ((x1 > 0 && x2 > 0) || (x1 < 0 && x2 < 0)) // If both input on same side of axis, average them
+    {
+        x = (x1/2)+(x2/2);
+    }
+    else // Opposite add full values
+    {
+        x = x1 + x2;
+    }
+    return x;
+}
 
 void printDebug(String msg) 
 {
     if (isConnectedToKSP && Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
     {
-        mySimpit.printToKSP(msg, PRINT_TO_SCREEN);   
+        mySimpit.printToKSP(msg, PRINT_TO_SCREEN);
     }
-    else
+    else if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON)
     {
         Serial.println(msg);
     }
 }
 
-#pragma endregion
+

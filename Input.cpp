@@ -297,9 +297,21 @@ void InputClass::update()
     }
 
     // Arduino Analog reading (Only for boolean analog interpretation)
+    // Read each button twice to allow the ADC multiplexer to settle between channels.
+    // On some boards/inputs a single quick analogRead can pick up the previous channel's value
+    // which can make one physical control appear to toggle another. Reading twice (or
+    // adding a tiny delay) avoids this cross-talk.
+    int rawTrans = analogRead(TRANSLATION_BUTTON_PIN);
+    delayMicroseconds(20);
+    rawTrans = analogRead(TRANSLATION_BUTTON_PIN);
 
-    translationButton = analogRead(TRANSLATION_BUTTON_PIN) > 50 ? false : true;
-    rotationButton = analogRead(ROTATION_BUTTON_PIN) > 50 ? false : true;
+    int rawRot = analogRead(ROTATION_BUTTON_PIN);
+    delayMicroseconds(20);
+    rawRot = analogRead(ROTATION_BUTTON_PIN);
+
+    const int BUTTON_THRESHOLD = 950; // slightly above 3/4 scale to avoid noise
+    translationButton = rawTrans > BUTTON_THRESHOLD;
+    rotationButton = rawRot > BUTTON_THRESHOLD;
 }
 
 void InputClass::setAllVPinsReady()

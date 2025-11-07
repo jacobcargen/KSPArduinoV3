@@ -8,7 +8,10 @@
 // Output.h
 #include <pins_arduino.h> 
 #include <variant.h> 
+#include <Wire.h>
 #include <LiquidCrystal_I2C.h>
+#include <Arduino.h>
+
 
 #ifndef _OUTPUT_h
 #define _OUTPUT_h
@@ -185,6 +188,8 @@ public:
 	void setHeadingLCD(String top, String bot);
 	void setDirectionLCD(String top, String bot);
 	void setInfoLCD(String top, String bot);
+	// Sound
+	void setSound(int frequency, bool enabled);
 };
 
 extern OutputClass Output;

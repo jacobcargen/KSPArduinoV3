@@ -20,7 +20,8 @@
 // Miscellaneous
 #define VPIN_DEBUG_SWITCH 0
 #define VPIN_SOUND_SWITCH 1
-#define VPIN_INPUT_ENABLE_BUTTON 2
+#define VPIN_MOD_BUTTON 2 // MOD KEY
+#define VPIN_AUTO_PILOT_SWITCH 58
 
 // Warnings
 #define VPIN_TEMP_WARNING_BUTTON 5
@@ -95,18 +96,16 @@
 #define VPIN_BRAKE_SWITCH 63
 
 // View
-#define VPIN_SCREENSHOT_BUTTON 95
-#define VPIN_UI_SWITCH 91
+#define VPIN_UI_BUTTON 95
+#define VPIN_DUAL_SWITCH 91
 #define VPIN_NAV_SWITCH 89
 #define VPIN_VIEW_SWITCH 87
 #define VPIN_FOCUS_BUTTON 86
 #define VPIN_CAM_MODE_BUTTON 84
 #define VPIN_CAM_RESET_BUTTON 93
-#define VPIN_ENABLE_LOOK_BUTTON                         0
 
 // Warping & Pause
 #define VPIN_WARP_LOCK_SWITCH 68
-#define VPIN_PHYS_WARP_SWITCH 58
 #define VPIN_CANCEL_WARP_BUTTON 94
 #define VPIN_DECREASE_WARP_BUTTON 96
 #define VPIN_INCREASE_WARP_BUTTON 92
@@ -129,7 +128,6 @@
 // EVA Specific Controls
 #define VPIN_BOARD_BUTTON 85
 #define VPIN_GRAB_BUTTON 100
-#define VPIN_JUMP_BUTTON                                0
 
 // Throttle
 #define VPIN_THROTTLE_LOCK_SWITCH 69
@@ -141,6 +139,9 @@
 // Rotation
 #define VPIN_ROT_HOLD_BUTTON 88
 #define VPIN_ROT_RESET_BUTTON 90
+
+#define VPIN_TRANSLATION_BUTTON 82
+#define VPIN_ROTATION_BUTTON 83
 
 // Rotation Joystick X-Axis(Roll)
 const int ROTATION_X_AXIS_PIN = A3;
@@ -181,30 +182,30 @@ private:
     Stream* debugSerial = nullptr;  // Add this member variable
     
 public:
-	 void init(Stream& serial);     // Modified init signature
-	 void update();
-     void setAllVPinsReady();
+	void init(Stream& serial);     // Modified init signature
+	void update();
+    void setAllVPinsReady();
 
-     ButtonState getVirtualPin(int virtualPinNumber, bool waitForChange = true);
+    ButtonState getVirtualPin(int virtualPinNumber, bool waitForChange = true);
 
-     // Throttle
-     int getThrottleAxis(); 
+    // Throttle
+    int getThrottleAxis(); 
 
-     // Translation
-     int getTranslationXAxis(); 
-     int getTranslationYAxis(); 
-     int getTranslationZAxis(); 
+    // Translation
+    int getTranslationXAxis(); 
+    int getTranslationYAxis(); 
+    int getTranslationZAxis(); 
 
-     // Rotation
-     int getRotationXAxis(); 
-     int getRotationYAxis(); 
-     int getRotationZAxis(); 
+    // Rotation
+    int getRotationXAxis(); 
+    int getRotationYAxis(); 
+    int getRotationZAxis();
 
-     // Debugging
-     void debugInputState(int virtualPinNumber);  
-     void debugSASWarningButton();
+    // Debugging
+    void debugInputState(int virtualPinNumber);  
+    void debugSASWarningButton();
 
-	 ~InputClass();  // Destructor declaration
+	~InputClass();  // Destructor declaration
 };
 
 extern InputClass Input;
