@@ -17,8 +17,9 @@
 struct VirtualPin
 {
     bool* value;
-    bool lastState;
-    bool lastReadingState; // ADDED: Tracks the raw reading to correctly detect changes
+    bool lastReadingState; 
+    bool lastDebouncedState;
+    bool hasBeenRead;
     unsigned long lastDebounceTime;
     unsigned long debounceDelay;
 };
@@ -26,36 +27,24 @@ struct VirtualPin
 // ARDUINO PINS
 
 // Shift in A pins (8 registers)
-const int SHIFT_IN_A_SERIAL_PIN = 11;
-const int SHIFT_IN_A_CLOCK_ENABLE_PIN = 12;
-const int SHIFT_IN_A_CLOCK_PIN = 13;
-const int SHIFT_IN_A_LOAD_PIN = 14;
+const int SHIFT_IN_A_LOAD_PIN = 12;
+const int SHIFT_IN_A_CLOCK_PIN = 14;
+const int SHIFT_IN_A_CLOCK_ENABLE_PIN = 13;
+const int SHIFT_IN_A_SERIAL_PIN = 15;
 // Shift in B pins (2 registers)
-const int SHIFT_IN_B_SERIAL_PIN = 15;
-const int SHIFT_IN_B_CLOCK_ENABLE_PIN = 16;
+const int SHIFT_IN_B_LOAD_PIN = 16;
 const int SHIFT_IN_B_CLOCK_PIN = 17;
-const int SHIFT_IN_B_LOAD_PIN = 18;
-// Rotation Joystick X-Axis(Roll)
-const int ROTATION_X_AXIS_PIN = A0;
-// Rotation Joystick Y-Axis(Pitch)
-const int ROTATION_Y_AXIS_PIN = A1;
-// Rotation Joystick Z-Axis(Yaw)
-const int ROTATION_Z_AXIS_PIN = A2;
-// Rotation Joystick Button
-const int ROTATION_BUTTON_PIN = A3;
-// Translation Joystick X-Axis(Left/Right)
-const int TRANSLATION_X_AXIS_PIN = A4;
-// Translation Joystick Y-Axis(Forward/Back)
-const int TRANSLATION_Y_AXIS_PIN = A5;
-// Translation Joystick Z-Axis(Up/Down)
-const int TRANSLATION_Z_AXIS_PIN = A6;
-// Translation Joystick ButtonTRAN
-const int TRANSLATION_BUTTON_PIN = A7;
-// Throttle Axis
-const int THROTTLE_AXIS_PIN = A8;
+const int SHIFT_IN_B_CLOCK_ENABLE_PIN = 18;
+const int SHIFT_IN_B_SERIAL_PIN = 19;
+
 // Test pins
 const byte TEST_BUTTON = 51;
 const byte TEST_SWITCH = 50;
+
+const int ARDUINO_PINS[18] = { 
+                              32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 
+                              42, 43, 44, 45, 46, 47, 48, 49}; 
+bool arduinoPins[18]; // States of the arduino pins
 
 // Test states
 bool testButton, testSwitch;
@@ -91,10 +80,11 @@ void AddInput(bool& referenceToBoolVal, int virtualPin, int debounce = 100)
         // Initialize the new elements that are not the one we are adding now
         for (int i = numPins; i < newSize; i++) {
             newPins[i].value = nullptr; // Or some other safe default
-            newPins[i].lastState = false;
             newPins[i].lastReadingState = false;
+            newPins[i].lastDebouncedState = false;
             newPins[i].lastDebounceTime = 0;
             newPins[i].debounceDelay = 100;
+            newPins[i].hasBeenRead = true;
         }
 
         // Delete the old array
@@ -107,61 +97,62 @@ void AddInput(bool& referenceToBoolVal, int virtualPin, int debounce = 100)
 
     // Now, we can safely add/overwrite the input at the specified index
     pins[virtualPin].value = &referenceToBoolVal;
-    pins[virtualPin].lastState = *pins[virtualPin].value;
     pins[virtualPin].lastReadingState = *pins[virtualPin].value;
-    pins[virtualPin].lastDebounceTime = 0;
+    pins[virtualPin].lastDebouncedState = *pins[virtualPin].value;
+    pins[virtualPin].lastDebounceTime = millis();
     pins[virtualPin].debounceDelay = debounce;
+    pins[virtualPin].hasBeenRead = true;
 }
-/// <summary>Read a virtual pin. These are added with AddInput() and stored in pins array.</summary>
-/// <param name="virtualPin"></param>
-/// <returns>This returns the virtual pin state at index, virtual pin.</returns>
-ButtonState getVirtualPin(int virtualPin, bool waitForChange)
+
+bool shouldReset = false;
+
+ButtonState InputClass::getVirtualPin(int virtualPin, bool waitForChange)
 {
-    if (virtualPin < 0 || virtualPin >= numPins || pins[virtualPin].value == nullptr) {
+    // Validate pin
+    if (virtualPin < 0 || virtualPin >= numPins || pins[virtualPin].value == nullptr) 
+    {
         if (debugSerial) {
-            debugSerial->println("Error: Virtual pin " + String(virtualPin) + " is out of range or not initialized.");
-        }
-        return NOT_READY;
-    }
-
-    bool currentReading = *pins[virtualPin].value;
-    unsigned long currentTime = millis();
-
-    // Detect if the raw input has changed since the last loop
-    if (currentReading != pins[virtualPin].lastReadingState) {
-        // If it changed, reset the debounce timer
-        pins[virtualPin].lastDebounceTime = currentTime;
-    }
-
-    // Update the last raw reading for the next loop
-    pins[virtualPin].lastReadingState = currentReading;
-
-    // After the debounce delay has passed...
-    if ((currentTime - pins[virtualPin].lastDebounceTime) > pins[virtualPin].debounceDelay) {
-        // ...the reading is now stable. If the stable state needs updating, do it.
-        if (pins[virtualPin].lastState != currentReading) {
-            pins[virtualPin].lastState = currentReading;
-
-            // If in waitForChange mode, return the new state now
-            if (waitForChange) {
-                return pins[virtualPin].lastState ? ON : OFF;
+            debugSerial->print("\n\n!!! ---- INVALID PIN: ");
+            debugSerial->print(virtualPin);
+            if (virtualPin < 0 || virtualPin >= numPins) {
+                debugSerial->print(" (out of bounds, numPins=");
+                debugSerial->print(numPins);
+                debugSerial->print(")");
+            } else if (pins[virtualPin].value == nullptr) {
+                debugSerial->print(" (null value)");
             }
+            debugSerial->print(" ---- !!!\n\n");
         }
-    }
-
-    // For waitForChange mode, if we're here, it means no debounced change happened
-    if (waitForChange) {
         return NOT_READY;
     }
+    
+    unsigned long now = millis();
+    bool currentReading = *pins[virtualPin].value;
+	unsigned long elapsed = now - pins[virtualPin].lastDebounceTime;
+    bool isDebouncePassed = elapsed > pins[virtualPin].debounceDelay;
 
-    // For normal mode, always return the last known stable state
-    return pins[virtualPin].lastState ? ON : OFF;
+    if (currentReading != pins[virtualPin].lastDebouncedState && isDebouncePassed)
+    {
+        pins[virtualPin].lastDebounceTime = now;
+        pins[virtualPin].lastDebouncedState = currentReading;
+        pins[virtualPin].hasBeenRead = false;
+    }
+    if (!waitForChange) 
+    {
+        return pins[virtualPin].lastDebouncedState ? ON : OFF;
+    }
+    if (!pins[virtualPin].hasBeenRead) 
+    {
+    	pins[virtualPin].hasBeenRead = true;
+    	return pins[virtualPin].lastDebouncedState ? ON : OFF; 
+    }
+    return NOT_READY;
 }
-/// <summary>Initialize all of the virtual pins.</summary>
+
 void initVirtualPins()
 {
-    // Calculate total number of pins and allocate memory once
-    const int totalPins = 84;
+    const int totalPins = 102; // 84+18 = 102
+     // Clean up existing pins array if it exists
     if (pins != nullptr) {
         delete[] pins;
     }
@@ -170,16 +161,21 @@ void initVirtualPins()
 
     for (int i = 0; i < 64; i++)
     {
-        AddInput(_sIA[i], i, 10);
+        AddInput(_sIA[i], i, 150);
     }
     for (int i = 0; i < 16; i++)
     {
-        AddInput(_sIB[i], i + 64, 25);
+        AddInput(_sIB[i], i + 64, 150);
     }
-    AddInput(testButton, 80, 50);
-    AddInput(testSwitch, 81, 50);
-    AddInput(translationButton, 82, 50);
-    AddInput(rotationButton, 83, 50);
+
+    AddInput(testButton, 80, 150);
+    AddInput(testSwitch, 81, 150);
+    AddInput(translationButton, 82, 150);
+    AddInput(rotationButton, 83, 150);
+    for (int i = 0; i < 18; i++)
+    {
+        AddInput(arduinoPins[i], i + 84, 150);
+    }
 }
 /// <summary>Gets shift register inputs.</summary>
 void _shiftIn(int dataA, int clockEnableA, int clockA, int loadA,
@@ -203,7 +199,7 @@ void _shiftIn(int dataA, int clockEnableA, int clockA, int loadA,
     // Get input A data
     digitalWrite(clockA, HIGH);
     digitalWrite(clockEnableA, LOW);
-    inputA[0] = shiftIn(dataA, clockA, LSBFIRST);  // Changed from MSBFIRST
+    inputA[0] = shiftIn(dataA, clockA, LSBFIRST);
     inputA[1] = shiftIn(dataA, clockA, LSBFIRST);
     inputA[2] = shiftIn(dataA, clockA, LSBFIRST);
     inputA[3] = shiftIn(dataA, clockA, LSBFIRST);
@@ -216,7 +212,7 @@ void _shiftIn(int dataA, int clockEnableA, int clockA, int loadA,
     for (size_t i = 0; i < 64; i++)
     {
         byte byteIndex = i / 8;
-        byte bitIndex = 7 - (i % 8);  // Reverse the bit order for MSBFIRST
+        byte bitIndex = 7 - (i % 8);
         
         if (byteIndex < 8 && bitRead(inputA[byteIndex], bitIndex)) {
             _sIA[i] = 1;
@@ -239,7 +235,7 @@ void _shiftIn(int dataA, int clockEnableA, int clockA, int loadA,
     for (size_t i = 0; i < 16; i++)
     {
         byte byteIndex = i / 8;
-        byte bitIndex = 7 - (i % 8);
+        byte bitIndex = i % 8;
         
         if (byteIndex < 2 && bitRead(inputB[byteIndex], bitIndex)) {
             _sIB[i] = 1;
@@ -261,16 +257,30 @@ void InputClass::init(Stream& serial)
     pinMode(SHIFT_IN_A_CLOCK_PIN, OUTPUT);
     pinMode(SHIFT_IN_A_CLOCK_ENABLE_PIN, OUTPUT);
     pinMode(SHIFT_IN_A_SERIAL_PIN, INPUT);
+
+    pinMode(SHIFT_IN_B_LOAD_PIN, OUTPUT);
+    pinMode(SHIFT_IN_B_CLOCK_PIN, OUTPUT);
+    pinMode(SHIFT_IN_B_CLOCK_ENABLE_PIN, OUTPUT);
+    pinMode(SHIFT_IN_B_SERIAL_PIN, INPUT);
     
+    for (auto pin : ARDUINO_PINS)
+    {
+        pinMode(pin, INPUT_PULLUP);
+    }
+	
     // Set initial states
     digitalWrite(SHIFT_IN_A_LOAD_PIN, HIGH);
     digitalWrite(SHIFT_IN_A_CLOCK_PIN, LOW);
     digitalWrite(SHIFT_IN_A_CLOCK_ENABLE_PIN, HIGH);
+
+    digitalWrite(SHIFT_IN_B_LOAD_PIN, HIGH);
+    digitalWrite(SHIFT_IN_B_CLOCK_PIN, LOW);
+    digitalWrite(SHIFT_IN_B_CLOCK_ENABLE_PIN, HIGH);
     
     // Initialize virtual pins
     initVirtualPins();
     
-    debugSerial->println("Input system initialized");
+    debugSerial->println("Input.cpp initialized.");
 }
 
 void InputClass::update()
@@ -281,113 +291,44 @@ void InputClass::update()
     // Arduino Digital Pin reading
     testButton = digitalRead(TEST_BUTTON);
     testSwitch = digitalRead(TEST_SWITCH);
+    for (int i = 0; i < 18; i++)
+    {
+        arduinoPins[i] = digitalRead(ARDUINO_PINS[i]);
+    }
 
     // Arduino Analog reading (Only for boolean analog interpretation)
+    // Read each button twice to allow the ADC multiplexer to settle between channels.
+    // On some boards/inputs a single quick analogRead can pick up the previous channel's value
+    // which can make one physical control appear to toggle another. Reading twice (or
+    // adding a tiny delay) avoids this cross-talk.
+    int rawTrans = analogRead(TRANSLATION_BUTTON_PIN);
+    delayMicroseconds(20);
+    rawTrans = analogRead(TRANSLATION_BUTTON_PIN);
 
-    translationButton = analogRead(TRANSLATION_BUTTON_PIN) > 50 ? false : true;
-    rotationButton = analogRead(ROTATION_BUTTON_PIN) > 50 ? false : true;
+    int rawRot = analogRead(ROTATION_BUTTON_PIN);
+    delayMicroseconds(20);
+    rawRot = analogRead(ROTATION_BUTTON_PIN);
+
+    const int BUTTON_THRESHOLD = 950; // slightly above 3/4 scale to avoid noise
+    translationButton = rawTrans > BUTTON_THRESHOLD;
+    rotationButton = rawRot > BUTTON_THRESHOLD;
 }
 
 void InputClass::setAllVPinsReady()
 {
     for (int i = 0; i < numPins; i++)
     {
-        pins[i].lastState = *pins[i].value;
+        pins[i].lastReadingState = *pins[i].value; // ADDED: keep aligned
+        pins[i].lastDebouncedState = *pins[i].value;
         pins[i].lastDebounceTime = millis();
+        pins[i].hasBeenRead = true;
     }
 }
 
-// Testing
-
-byte InputClass::getTestButton(bool waitForChange)                
-{ 
-    return getVirtualPin(80, waitForChange); 
-}
-byte InputClass::getTestSwitch(bool waitForChange)
-{ 
-    return getVirtualPin(81, waitForChange); 
-}
-
-// Miscellaneous
-
-byte InputClass::getDebugSwitch(bool waitForChange)               
-{
-    return getVirtualPin(0, waitForChange);  // Assuming debug switch is pin 0
-}
-byte InputClass::getSoundSwitch(bool waitForChange)               
-{ 
-    return getVirtualPin(1, waitForChange);
-}
-byte InputClass::getInputEnableButton(bool waitForChange)         
-{ 
-    return getVirtualPin(2, waitForChange);
-}
-
-// Warnings
-
-byte InputClass::getTempWarningButton(bool waitForChange)         
-{ 
-    return getVirtualPin(3, waitForChange);
-}
-byte InputClass::getGeeWarningButton(bool waitForChange)          
-{ 
-    return getVirtualPin(4, waitForChange);
-}
-byte InputClass::getWarpWarningButton(bool waitForChange)         
-{ 
-    return getVirtualPin(5, waitForChange);
-}
-byte InputClass::getBrakeWarningButton(bool waitForChange)        
-{ 
-    return getVirtualPin(6, waitForChange);
-}
-byte InputClass::getSASWarningButton(bool waitForChange)          
-{ 
-    return getVirtualPin(7, waitForChange);
-}
-byte InputClass::getRCSWarningButton(bool waitForChange)          
-{ 
-    return getVirtualPin(8, waitForChange);
-}
-byte InputClass::getGearWarningButton(bool waitForChange)         
-{ 
-    return getVirtualPin(9, waitForChange);
-}
-byte InputClass::getCommsWarningButton(bool waitForChange)        
-{ 
-    return getVirtualPin(10, waitForChange);
-}
-byte InputClass::getAltWarningButton(bool waitForChange)          
-{ 
-    return getVirtualPin(11, waitForChange);
-}
-byte InputClass::getPitchWarningButton(bool waitForChange)        
-{ 
-    return getVirtualPin(12, waitForChange);
-}
-
-// Display Controls
-
-byte InputClass::getStageViewSwitch(bool waitForChange)           
-{ 
-return getVirtualPin(13, waitForChange);
-}
-byte InputClass::getVerticalVelocitySwitch(bool waitForChange)    
-{ 
-return getVirtualPin(14, waitForChange);
-}
-byte InputClass::getReferenceModeButton(bool waitForChange)       
-{ 
-return getVirtualPin(15, waitForChange);
-}
-byte InputClass::getRadarAltitudeSwitch(bool waitForChange)       
-{ 
-    return getVirtualPin(16, waitForChange);
-}
-
+/*
 byte InputClass::getInfoMode()
 {
-    /*
+    
     for (int i = 1; i < 13; i++)
     {
         if (getVirtualPinState(i + 17))
@@ -399,13 +340,13 @@ byte InputClass::getInfoMode()
             // ERROR, should return true
         }
     }
-    */
+    
     return NOT_READY; // Add a default return value
 }
 
 byte InputClass::getDirectionMode()
 {
-    /*
+    
     for (int i = 1; i < 13; i++)
     {
         if (getVirtualPinState(i + 29))
@@ -417,235 +358,16 @@ byte InputClass::getDirectionMode()
             // ERROR, should return true
         }
     }
-    */
+    
     return NOT_READY; // Add a default return value
 }
-
-// Staging
-
-byte InputClass::getStageButton(bool waitForChange)                
-{ 
-    return getVirtualPin(17, waitForChange);
-}
-byte InputClass::getStageLockSwitch(bool waitForChange)            
-{ 
-    return getVirtualPin(18, waitForChange);
-}
-
-// Aborting
-
-byte InputClass::getAbortButton(bool waitForChange)                
-{ 
-    return getVirtualPin(19, waitForChange); 
-}
-byte InputClass::getAbortLockSwitch(bool waitForChange)            
-{ 
-    return getVirtualPin(20, waitForChange);
-}
-
-// Custom Action Groups
-
-byte InputClass::getCAG1(bool waitForChange)                       
-{ 
-    return getVirtualPin(21, waitForChange); 
-}
-byte InputClass::getCAG2(bool waitForChange)                       
-{ 
-    return getVirtualPin(22, waitForChange); 
-}
-byte InputClass::getCAG3(bool waitForChange)                       
-{ 
-    return getVirtualPin(23, waitForChange); 
-}
-byte InputClass::getCAG4(bool waitForChange)                       
-{ 
-    return getVirtualPin(24, waitForChange); 
-}
-byte InputClass::getCAG5(bool waitForChange)                       
-{ 
-    return getVirtualPin(25, waitForChange); 
-}
-byte InputClass::getCAG6(bool waitForChange)                       
-{ 
-    return getVirtualPin(26, waitForChange); 
-}
-byte InputClass::getCAG7(bool waitForChange)                       
-{ 
-    return getVirtualPin(27, waitForChange); 
-}
-byte InputClass::getCAG8(bool waitForChange)                       
-{ 
-    return getVirtualPin(28, waitForChange); 
-}
-byte InputClass::getCAG9(bool waitForChange)                       
-{ 
-    return getVirtualPin(29, waitForChange); 
-}
-byte InputClass::getCAG10(bool waitForChange)                      
-{ 
-    return getVirtualPin(30, waitForChange); 
-}
-
-// Other Action Groups
-
-byte InputClass::getDockingSwitch(bool waitForChange)              
-{   
-    return getVirtualPin(31, waitForChange); 
-}
-byte InputClass::getPercisionSwitch(bool waitForChange)            
-{   
-    return getVirtualPin(32, waitForChange); 
-}
-byte InputClass::getLightsSwitch(bool waitForChange)               
-{   
-    return getVirtualPin(33, waitForChange); 
-}
-byte InputClass::getGearSwitch(bool waitForChange)                 
-{   
-    return getVirtualPin(34, waitForChange); 
-}
-byte InputClass::getBrakeSwitch(bool waitForChange)                
-{   
-    return getVirtualPin(35, waitForChange); 
-}
-
-// View
-
-byte InputClass::getScreenshotButton(bool waitForChange)           
-{ 
-    return getVirtualPin(36, waitForChange); 
-}
-byte InputClass::getUISwitch(bool waitForChange)                   
-{ 
-    return getVirtualPin(37, waitForChange); 
-}
-byte InputClass::getNavSwitch(bool waitForChange)                  
-{ 
-    return getVirtualPin(38, waitForChange); 
-}
-byte InputClass::getViewSwitch(bool waitForChange)                 
-{ 
-    return getVirtualPin(39, waitForChange); 
-}
-byte InputClass::getFocusButton(bool waitForChange)                
-{ 
-    return getVirtualPin(40, waitForChange); 
-}
-byte InputClass::getCamModeButton(bool waitForChange)              
-{ 
-    return getVirtualPin(41, waitForChange); 
-}
-byte InputClass::getCamResetButton(bool waitForChange)             
-{ 
-    return getVirtualPin(42, waitForChange); 
-}
-byte InputClass::getEnableLookButton(bool waitForChange)           
-{ 
-    return getVirtualPin(83, waitForChange); 
-}
-
-// Warping & Pause
-
-byte InputClass::getWarpLockSwitch(bool waitForChange)             
-{ 
-    return getVirtualPin(43, waitForChange); 
-}
-byte InputClass::getPhysWarpSwitch(bool waitForChange)             
-{ 
-    return getVirtualPin(44, waitForChange); 
-}
-byte InputClass::getCancelWarpButton(bool waitForChange)           
-{ 
-    return getVirtualPin(45, waitForChange); 
-}
-byte InputClass::getDecreaseWarpButton(bool waitForChange)         
-{ 
-    return getVirtualPin(46, waitForChange); 
-}
-byte InputClass::getIncreaseWarpButton(bool waitForChange)         
-{ 
-    return getVirtualPin(47, waitForChange); 
-}
-byte InputClass::getPauseButton(bool waitForChange)                
-{ 
-    return getVirtualPin(48, waitForChange); 
-}
-
-// SAS & RCS
-
-byte InputClass::getSASStabilityAssistButton(bool waitForChange)    
-{ 
-    return getVirtualPin(49, waitForChange); 
-}
-byte InputClass::getSASManeuverButton(bool waitForChange)           
-{ 
-    return getVirtualPin(50, waitForChange); 
-}
-byte InputClass::getSASProgradeButton(bool waitForChange)           
-{ 
-    return getVirtualPin(51, waitForChange); 
-}
-byte InputClass::getSASRetrogradeButton(bool waitForChange)         
-{ 
-    return getVirtualPin(52, waitForChange); 
-}
-byte InputClass::getSASNormalButton(bool waitForChange)             
-{ 
-    return getVirtualPin(53, waitForChange); 
-}
-byte InputClass::getSASAntiNormalButton(bool waitForChange)         
-{ 
-    return getVirtualPin(54, waitForChange); 
-}
-byte InputClass::getSASRadialInButton(bool waitForChange)           
-{ 
-    return getVirtualPin(55, waitForChange); 
-}
-byte InputClass::getSASRadialOutButton(bool waitForChange)          
-{ 
-    return getVirtualPin(56, waitForChange); 
-}
-byte InputClass::getSASTargetButton(bool waitForChange)             
-{ 
-    return getVirtualPin(57, waitForChange); 
-}
-byte InputClass::getSASAntiTargetButton(bool waitForChange)         
-{ 
-    return getVirtualPin(58, waitForChange); 
-}
-byte InputClass::getSASSwitch(bool waitForChange)                   
-{ 
-    return getVirtualPin(59, waitForChange); 
-}
-byte InputClass::getRCSSwitch(bool waitForChange)                   
-{ 
-    return getVirtualPin(60, waitForChange); 
-}
-
-// EVA Specific Controls
-
-byte InputClass::getBoardButton(bool waitForChange)                
-{
-    return getVirtualPin(61, waitForChange); 
-}
-byte InputClass::getGrabButton(bool waitForChange)                 
-{
-    return getVirtualPin(62, waitForChange); 
-}
-byte InputClass::getJumpButton(bool waitForChange)                 
-{ 
-    return getVirtualPin(82, waitForChange); 
-} //Move this logic into a state
+*/
 
 // Throttle
 
 int  InputClass::getThrottleAxis()               
 {
     return analogRead(THROTTLE_AXIS_PIN); 
-}
-byte InputClass::getThrottleLockSwitch(bool waitForChange)         
-{
-    return getVirtualPin(63, waitForChange); 
 }
 
 // Translation
@@ -662,14 +384,6 @@ int  InputClass::getTranslationZAxis()
 { 
     return analogRead(TRANSLATION_Z_AXIS_PIN); 
 }
-byte InputClass::getTransHoldButton(bool waitForChange)            
-{ 
-    return getVirtualPin(64, waitForChange); 
-}
-byte InputClass::getTransResetButton(bool waitForChange)           
-{ 
-    return getVirtualPin(65, waitForChange); 
-}
 
 // Rotation
 
@@ -685,14 +399,6 @@ int  InputClass::getRotationZAxis()
 { 
     return analogRead(ROTATION_Z_AXIS_PIN); 
 }
-byte InputClass::getRotHoldButton(bool waitForChange)            
-{ 
-    return getVirtualPin(66, waitForChange); 
-}
-byte InputClass::getRotResetButton(bool waitForChange)       
-{ 
-    return getVirtualPin(67, waitForChange); 
-}
 
 // Debugging
 
@@ -706,27 +412,8 @@ void InputClass::debugInputState(int virtualPinNumber) {
         return;
     }
     
-    debugSerial->print("Pin ");
-    debugSerial->print(virtualPinNumber);
-    debugSerial->print(": Raw=");
-    debugSerial->print(*pins[virtualPinNumber].value ? "HIGH" : "LOW");
-    debugSerial->print(", LastState=");
-    debugSerial->print(pins[virtualPinNumber].lastState ? "HIGH" : "LOW");
-    debugSerial->print(", Time since change=");
-    debugSerial->print(millis() - pins[virtualPinNumber].lastDebounceTime);
-    debugSerial->print("ms, Debounce delay=");
-    debugSerial->print(pins[virtualPinNumber].debounceDelay);
-    debugSerial->print("ms, Result=");
-    
     ButtonState state = getVirtualPin(virtualPinNumber, false);
     debugSerial->println(state == ON ? "ON" : state == OFF ? "OFF" : "NOT_READY");
-}
-
-void InputClass::debugSASWarningButton() {
-    if (debugSerial) {
-        debugSerial->println("SAS Warning Button (Pin 7):");
-    }
-    debugInputState(7);
 }
 
 #pragma endregion

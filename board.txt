@@ -1,4 +1,0 @@
-# KSPArduinoV3 build property overrides
-#
-
-
