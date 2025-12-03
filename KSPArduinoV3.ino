@@ -315,26 +315,26 @@ const unsigned long EASTER_EGG_ANIMATION_SPEED = 150;  // ms between frames
 
 
 // Calibration values (set during startup calibration)
-int throttleCalMin = 75;
-int throttleCalMax = 765;
+int throttleCalMin = 106;
+int throttleCalMax = 721;
 int rotXCalMin = 0;
-int rotXCalMax = 1023;
-int rotXCalCenter = 512;
-int rotYCalMin = 0;
-int rotYCalMax = 1023;
-int rotYCalCenter = 512;
-int rotZCalMin = 0;
-int rotZCalMax = 1023;
-int rotZCalCenter = 512;
+int rotXCalMax = 938;
+int rotXCalCenter = 471;
+int rotYCalMin = 25;
+int rotYCalMax = 938;
+int rotYCalCenter = 464;
+int rotZCalMin = 3;
+int rotZCalMax = 913;
+int rotZCalCenter = 501;
 int transXCalMin = 0;
-int transXCalMax = 1023;
-int transXCalCenter = 512;
-int transYCalMin = 0;
-int transYCalMax = 1023;
-int transYCalCenter = 512;
-int transZCalMin = 0;
-int transZCalMax = 1023;
-int transZCalCenter = 512;
+int transXCalMax = 938;
+int transXCalCenter = 481;
+int transYCalMin = 1;
+int transYCalMax = 938;
+int transYCalCenter = 458;
+int transZCalMin = 3;
+int transZCalMax = 959;
+int transZCalCenter = 464;
 
 // Camera control
 unsigned long lastCameraUpdate = 0;
@@ -2849,7 +2849,7 @@ void refreshTranslation()
             mySimpit.printToKSP("Autopilot DISENGAGED (joystick override)", PRINT_TO_SCREEN);
             printDebug("Autopilot cancelled by translation joystick override");
         }
-        else
+        else 
         {
             // Block translation messages while autopilot holds
             return;
