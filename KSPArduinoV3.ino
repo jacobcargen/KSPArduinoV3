@@ -237,13 +237,11 @@ const float OVERSPEED_ALTITUDE_THRESHOLD = 15000.0; // 15 km
 
 // Joystick configs
 const float JOYSTICK_SMOOTHING_FACTOR = 0.2;  // Adjust this value for more or less smoothing (For Rot and Trans)
-const int JOYSTICK_DEADZONE = 90;  // Deadzone range (within 90 from center = 512)
+const int JOYSTICK_DEADZONE = 50;  // Deadzone range
 const int JOYSTICK_DEADZONE_CENTER = 90;  // Snap centering
 const int CAMERA_DEADZONE = 150; // Deadzone for camera joystick
 
 // Throttle configs
-const int MIN_THROTTLE_POS = 75;    // Minimum throttle position 0
-const int MAX_THROTTLE_POS = 765;   // Maximum throttle position 1023
 const int THROTTLE_DEADZONE = 50;   // Deadzone at min and max
 
 // Precision mode
@@ -263,7 +261,7 @@ const float AUTOPILOT_ALT_PRIORITY_THRESHOLD = 5.0; // meters: if altitude error
 const float AUTOPILOT_HEADING_PRIORITY_THRESHOLD = 2.0; // degrees: if heading error is larger, deprioritize speed matching
 
 // Roll sensitivity
-const float ROLL_SENSITIVITY = 0.35;
+const float ROLL_SENSITIVITY = 1;
 
 // Serial baud rate
 const unsigned long SERIAL_BAUD_RATE = 115200;
@@ -280,7 +278,13 @@ float precisionModifier = DEFAULT_PRECISION_MODIFIER;
 bool lastGrabButtonState = false;
 bool lastBoardButtonState = false;
 bool isDebugMode = true;
+
+// Precision display overlay
+bool precisionDisplayActive = false;
+unsigned long precisionDisplayStartTime = 0;
+const unsigned long PRECISION_DISPLAY_DURATION = 500;  // Show for 500ms
 bool isConnectedToKSP = false;
+bool initializationComplete = false;  // Set to true after passcode and calibration
 bool useImperialUnits = false;  // Global flag for imperial/metric units
 int loopCount = 0;
 int previousMillis;  // For hz calculation
@@ -302,6 +306,36 @@ int16_t trimRotX = 0;
 int16_t trimRotY = 0;  // No default pitch trim
 int16_t trimRotZ = 0;
 
+// Easter egg state for direction mode 12
+int easterEggAbortCount = 0;
+bool easterEggActive = false;
+int easterEggPosition = 0;
+unsigned long lastEasterEggUpdate = 0;
+const unsigned long EASTER_EGG_ANIMATION_SPEED = 150;  // ms between frames
+
+
+// Calibration values (set during startup calibration)
+int throttleCalMin = 75;
+int throttleCalMax = 765;
+int rotXCalMin = 0;
+int rotXCalMax = 1023;
+int rotXCalCenter = 512;
+int rotYCalMin = 0;
+int rotYCalMax = 1023;
+int rotYCalCenter = 512;
+int rotZCalMin = 0;
+int rotZCalMax = 1023;
+int rotZCalCenter = 512;
+int transXCalMin = 0;
+int transXCalMax = 1023;
+int transXCalCenter = 512;
+int transYCalMin = 0;
+int transYCalMax = 1023;
+int transYCalCenter = 512;
+int transZCalMin = 0;
+int transZCalMax = 1023;
+int transZCalCenter = 512;
+
 // Camera control
 unsigned long lastCameraUpdate = 0;
 
@@ -318,6 +352,7 @@ Timer lcdTimer;
 Timer twoSecondTimer;
 Timer throttleDebugTimer;
 Timer manualRefreshTimer;
+Timer joystickDebugTimer;
 
 
 
@@ -334,6 +369,7 @@ void setup()
     twoSecondTimer.start(TWO_SECOND_INTERVAL);
     throttleDebugTimer.start(THROTTLE_DEBUG_INTERVAL);
     manualRefreshTimer.start(MANUAL_REFRESH_INTERVAL);
+    joystickDebugTimer.start(500); // 500ms for joystick debug updates
     // Open up the serial port
     Serial.begin(SERIAL_BAUD_RATE);
     // Init I/O
@@ -361,19 +397,28 @@ void setup()
         preKSPConnectionLoop();
     }
     Output.setLED(POWER_LED, true);
+    
 	printDebug("Starting Simpit");
 	setAllOutputs(true);
     ///// Initialize Simpit
     initSimpit();
+    
+    // Passcode entry required after KSP connection: {5, 2, 5, 3}
+    waitForPasscode();
 
     // Additional things to do at start AFTER initialization
 
+    // Run calibration routine
+    runCalibration();
     
     //waitForInputEnable();
     mySimpit.update();
 
-    // Initialization complete
+    // Initialization complete - now allow vessel change detection
+    initializationComplete = true;
     printDebug("Initialization Complete!");
+    mySimpit.requestMessageOnChannel(FLIGHT_STATUS_MESSAGE);
+
 
 } 
 
@@ -391,7 +436,15 @@ void loop()
         mySimpit.requestMessageOnChannel(CAGSTATUS_MESSAGE);
         mySimpit.requestMessageOnChannel(SAS_MODE_INFO_MESSAGE);
         mySimpit.requestMessageOnChannel(SOI_MESSAGE);
+        mySimpit.requestMessageOnChannel(FLIGHT_STATUS_MESSAGE);
     }
+    
+    // Check if precision display overlay should be cleared
+    if (precisionDisplayActive && (millis() - precisionDisplayStartTime >= PRECISION_DISPLAY_DURATION))
+    {
+        precisionDisplayActive = false;
+    }
+    
     // Refresh logic, I/O, etc. This is all local to KSPArduino.ino
     refresh();
     // Update output to controller (send LED states to hardware)
@@ -407,17 +460,35 @@ void initIO()
     Input.init(Serial);
     Input.setAllVPinsReady();
 	
-	// Test I/O
-	printDebug("Testing I/O");
-	// Output
+	// Cool startup LED sequence
+	printDebug("Testing I/O - LED Startup Sequence");
+	
+	// Turn all LEDs off first
 	setAllOutputs(false);
     Output.update();
-	delay(1500);
-	setAllOutputs(true);
-    Output.update();
-	delay(1500);
-	setAllOutputs(false);
-    Output.update();
+	delay(200);
+	
+	// Light up LEDs one at a time in sequence
+	for (int i = 0; i <= TOTAL_LEDS; i++)
+	{
+		Output.setLED(i, true);
+		Output.update();
+		delay(8);  // Fast sequence - all LEDs in ~1.2 seconds
+	}
+	
+	// Hold all on briefly
+	delay(300);
+	
+	// Turn off in reverse order
+	for (int i = TOTAL_LEDS; i >= 0; i--)
+	{
+		Output.setLED(i, false);
+		Output.update();
+		delay(8);
+	}
+	
+	// Brief pause
+	delay(100);
 
     // Input
     Input.update();
@@ -431,6 +502,145 @@ void setAllOutputs(bool state)
 	{
 		Output.setLED(i, state);
 	}
+}
+
+void waitForPasscode()
+{
+    const int passcode[4] = {6, 9, 6, 9};
+    int currentPosition = 0;
+    int enteredCode[4] = {0, 0, 0, 0};
+    
+    // Display passcode prompt
+    Output.setSpeedLCD("ENTER PASSCODE", "Use AG Keys");
+    Output.setAltitudeLCD("SECURITY", "LOCKED");
+    Output.setHeadingLCD("", "");
+    Output.setInfoLCD("Progress:", String(currentPosition) + " of 4");
+    Output.setDirectionLCD("Waiting...", "");
+    Output.update();
+    
+    // Blink power LED while waiting for passcode
+    unsigned long lastBlinkTime = millis();
+    bool blinkState = false;
+    
+    while (currentPosition < 4)
+    {
+        Input.update();
+        
+        // Blink power LED
+        if (millis() - lastBlinkTime > 500)
+        {
+            blinkState = !blinkState;
+            Output.setLED(POWER_LED, blinkState);
+            lastBlinkTime = millis();
+            Output.update();
+        }
+        
+        // Check each AG button
+        for (int i = 1; i <= 10; i++)
+        {
+            int vpin = 0;
+            switch(i) {
+                case 1: vpin = VPIN_CAG1; break;
+                case 2: vpin = VPIN_CAG2; break;
+                case 3: vpin = VPIN_CAG3; break;
+                case 4: vpin = VPIN_CAG4; break;
+                case 5: vpin = VPIN_CAG5; break;
+                case 6: vpin = VPIN_CAG6; break;
+                case 7: vpin = VPIN_CAG7; break;
+                case 8: vpin = VPIN_CAG8; break;
+                case 9: vpin = VPIN_CAG9; break;
+                case 10: vpin = VPIN_CAG10; break;
+            }
+            
+            if (Input.getVirtualPin(vpin) == ON)
+            {
+                // Record the button pressed
+                enteredCode[currentPosition] = i;
+                currentPosition++;
+                
+                // Acknowledge beep
+                beepSound.setSound(1500, true);
+                delay(100);
+                beepSound.setSound(0, false);
+                
+                // Update progress
+                Output.setInfoLCD("Progress:", String(currentPosition) + " of 4");
+                Output.update();
+                
+                // Wait for button release
+                while (Input.getVirtualPin(vpin) != OFF)
+                {
+                    Input.update();
+                    delay(10);
+                }
+                delay(100); // Debounce
+                
+                // Check if we've entered all 4 digits
+                if (currentPosition == 4)
+                {
+                    // Verify the complete passcode
+                    bool isCorrect = true;
+                    for (int j = 0; j < 4; j++)
+                    {
+                        if (enteredCode[j] != passcode[j])
+                        {
+                            isCorrect = false;
+                            break;
+                        }
+                    }
+                    
+                    if (!isCorrect)
+                    {
+                        // Wrong passcode - reset and show error
+                        currentPosition = 0;
+                        
+                        // Error beep
+                        beepSound.setSound(500, true);
+                        delay(300);
+                        beepSound.setSound(0, false);
+                        
+                        // Show error
+                        Output.setInfoLCD("WRONG!", "Try Again");
+                        Output.setDirectionLCD("Reset to 0", "");
+                        Output.update();
+                        delay(1500);
+                        
+                        // Restore display
+                        Output.setInfoLCD("Progress:", String(currentPosition) + " of 4");
+                        Output.setDirectionLCD("Waiting...", "");
+                        Output.update();
+                    }
+                }
+                break;
+            }
+        }
+        
+        delay(10);
+    }
+    
+    // Passcode correct!
+    Output.setSpeedLCD("PASSCODE", "ACCEPTED!");
+    Output.setAltitudeLCD("", "");
+    Output.setHeadingLCD("Access", "Granted");
+    Output.setInfoLCD("", "");
+    Output.setDirectionLCD("", "");
+    Output.setLED(POWER_LED, true);
+    Output.update();
+    
+    // Success beep sequence
+    beepSound.setSound(1000, true);
+    delay(100);
+    beepSound.setSound(0, false);
+    delay(50);
+    beepSound.setSound(1500, true);
+    delay(100);
+    beepSound.setSound(0, false);
+    delay(50);
+    beepSound.setSound(2000, true);
+    delay(200);
+    beepSound.setSound(0, false);
+    
+    delay(1000);
 }
 
 void preKSPConnectionLoop()
@@ -502,6 +712,310 @@ void serialLedTestDebug()
     }
 }
 
+// Helper function for calibration: waits for any button press
+// Returns true if MOD button was pressed (skip to center), false if any other button (continue calibration)
+bool waitForAnyButton()
+{
+    bool modPressed = false;
+    
+    // List of CAG buttons to check
+    const int cagButtons[] = {
+        VPIN_CAG1, VPIN_CAG2, VPIN_CAG3, VPIN_CAG4, VPIN_CAG5, 
+        VPIN_CAG6, VPIN_CAG7, VPIN_CAG8, VPIN_CAG9, VPIN_CAG10
+    };
+    const int numButtons = sizeof(cagButtons) / sizeof(cagButtons[0]);
+    
+    while (true) {
+        Input.update();
+        
+        // Show live value on Heading LCD based on what axis we're calibrating
+        // This is a simplified version - could be enhanced to detect which axis
+        int liveVal = Input.getThrottleAxis(); // Default to throttle, actual value set by caller
+        Output.setHeadingLCD("LIVE VALUE", String(liveVal));
+        Output.update();
+        
+        // Check if MOD button pressed (skip)
+        if (Input.getVirtualPin(VPIN_MOD_BUTTON, false) == ON) {
+            modPressed = true;
+            // Wait for release
+            while (Input.getVirtualPin(VPIN_MOD_BUTTON, false) == ON) {
+                Input.update();
+                delay(10);
+            }
+            delay(100); // Debounce
+            return true; // Skip to center
+        }
+        
+        // Check any CAG button (continue)
+        for (int i = 0; i < numButtons; i++) {
+            if (Input.getVirtualPin(cagButtons[i], false) == ON) {
+                // Wait for release
+                while (Input.getVirtualPin(cagButtons[i], false) == ON) {
+                    Input.update();
+                    delay(10);
+                }
+                delay(100); // Debounce
+                return false; // Continue calibration
+            }
+        }
+        
+        delay(50);
+    }
+}
+
+void runCalibration()
+{
+    Output.setSpeedLCD("CALIBRATION", "MODE");
+    Output.setAltitudeLCD("Any CAG=Calib", "MOD=Skip to Ctr");
+    Output.setHeadingLCD("", "");
+    Output.setInfoLCD("Skip uses", "default min/max");
+    Output.setDirectionLCD("", "");
+    Output.update();
+    delay(3000);
+    
+    bool skipCalibration = false;
+    
+    // Step 1: Throttle Min
+    Output.setSpeedLCD("THROTTLE", "MIN Position");
+    Output.setAltitudeLCD("Any CAG=Calib", "MOD=Skip to Ctr");
+    Output.update();
+    
+    skipCalibration = waitForAnyButton();
+    if (!skipCalibration) {
+        throttleCalMin = Input.getThrottleAxis();
+        Output.setAltitudeLCD("Min: " + String(throttleCalMin), "Recorded!");
+        Output.update();
+        delay(1000);
+    }
+    
+    // Step 2: Throttle Max
+    if (!skipCalibration) {
+        Output.setSpeedLCD("THROTTLE", "MAX Position");
+        Output.setAltitudeLCD("Any CAG=Calib", "MOD=Skip to Ctr");
+        Output.update();
+        
+        skipCalibration = waitForAnyButton();
+        if (!skipCalibration) {
+            throttleCalMax = Input.getThrottleAxis();
+            Output.setAltitudeLCD("Max: " + String(throttleCalMax), "Recorded!");
+            Output.update();
+            delay(1000);
+        }
+    }
+    
+    // Step 3: Rotation X (Roll) - Left/Min
+    if (!skipCalibration) {
+        Output.setSpeedLCD("ROTATION X", "LEFT (Min)");
+        Output.setAltitudeLCD("Any CAG=Calib", "MOD=Skip to Ctr");
+        Output.update();
+        
+        skipCalibration = waitForAnyButton();
+        if (!skipCalibration) {
+            rotXCalMin = Input.getRotationXAxis();
+            Output.setAltitudeLCD("Min: " + String(rotXCalMin), "Recorded!");
+            Output.update();
+            delay(1000);
+        }
+    }
+    
+    // Step 4: Rotation X - Right/Max
+    if (!skipCalibration) {
+        Output.setSpeedLCD("ROTATION X", "RIGHT (Max)");
+        Output.setAltitudeLCD("Any CAG=Calib", "MOD=Skip to Ctr");
+        Output.update();
+        
+        skipCalibration = waitForAnyButton();
+        if (!skipCalibration) {
+            rotXCalMax = Input.getRotationXAxis();
+            Output.setAltitudeLCD("Max: " + String(rotXCalMax), "Recorded!");
+            Output.update();
+            delay(1000);
+        }
+    }
+    
+    // Step 5: Rotation Y (Pitch) - Forward/Min
+    if (!skipCalibration) {
+        Output.setSpeedLCD("ROTATION Y", "FORWARD (Min)");
+        Output.setAltitudeLCD("Any CAG=Calib", "MOD=Skip to Ctr");
+        Output.update();
+        
+        skipCalibration = waitForAnyButton();
+        if (!skipCalibration) {
+            rotYCalMin = Input.getRotationYAxis();
+            Output.setAltitudeLCD("Min: " + String(rotYCalMin), "Recorded!");
+            Output.update();
+            delay(1000);
+        }
+    }
+    
+    // Step 6: Rotation Y - Back/Max
+    if (!skipCalibration) {
+        Output.setSpeedLCD("ROTATION Y", "BACK (Max)");
+        Output.setAltitudeLCD("Any CAG=Calib", "MOD=Skip to Ctr");
+        Output.update();
+        
+        skipCalibration = waitForAnyButton();
+        if (!skipCalibration) {
+            rotYCalMax = Input.getRotationYAxis();
+            Output.setAltitudeLCD("Max: " + String(rotYCalMax), "Recorded!");
+            Output.update();
+            delay(1000);
+        }
+    }
+    
+    // Step 7: Rotation Z (Yaw) - Left/Min
+    if (!skipCalibration) {
+        Output.setSpeedLCD("ROTATION Z", "LEFT (Min)");
+        Output.setAltitudeLCD("Any CAG=Calib", "MOD=Skip to Ctr");
+        Output.update();
+        
+        skipCalibration = waitForAnyButton();
+        if (!skipCalibration) {
+            rotZCalMin = Input.getRotationZAxis();
+            Output.setAltitudeLCD("Min: " + String(rotZCalMin), "Recorded!");
+            Output.update();
+            delay(1000);
+        }
+    }
+    
+    // Step 8: Rotation Z - Right/Max
+    if (!skipCalibration) {
+        Output.setSpeedLCD("ROTATION Z", "RIGHT (Max)");
+        Output.setAltitudeLCD("Any CAG=Calib", "MOD=Skip to Ctr");
+        Output.update();
+        
+        skipCalibration = waitForAnyButton();
+        if (!skipCalibration) {
+            rotZCalMax = Input.getRotationZAxis();
+            Output.setAltitudeLCD("Max: " + String(rotZCalMax), "Recorded!");
+            Output.update();
+            delay(1000);
+        }
+    }
+    
+    // Step 9: Translation X - Left/Min
+    if (!skipCalibration) {
+        Output.setSpeedLCD("TRANSLATION X", "LEFT (Min)");
+        Output.setAltitudeLCD("Any CAG=Calib", "MOD=Skip to Ctr");
+        Output.update();
+        
+        skipCalibration = waitForAnyButton();
+        if (!skipCalibration) {
+            transXCalMin = Input.getTranslationXAxis();
+            Output.setAltitudeLCD("Min: " + String(transXCalMin), "Recorded!");
+            Output.update();
+            delay(1000);
+        }
+    }
+    
+    // Step 10: Translation X - Right/Max
+    if (!skipCalibration) {
+        Output.setSpeedLCD("TRANSLATION X", "RIGHT (Max)");
+        Output.setAltitudeLCD("Any CAG=Calib", "MOD=Skip to Ctr");
+        Output.update();
+        
+        skipCalibration = waitForAnyButton();
+        if (!skipCalibration) {
+            transXCalMax = Input.getTranslationXAxis();
+            Output.setAltitudeLCD("Max: " + String(transXCalMax), "Recorded!");
+            Output.update();
+            delay(1000);
+        }
+    }
+    
+    // Step 11: Translation Y - Forward/Min
+    if (!skipCalibration) {
+        Output.setSpeedLCD("TRANSLATION Y", "FORWARD (Min)");
+        Output.setAltitudeLCD("Any CAG=Calib", "MOD=Skip to Ctr");
+        Output.update();
+        
+        skipCalibration = waitForAnyButton();
+        if (!skipCalibration) {
+            transYCalMin = Input.getTranslationYAxis();
+            Output.setAltitudeLCD("Min: " + String(transYCalMin), "Recorded!");
+            Output.update();
+            delay(1000);
+        }
+    }
+    
+    // Step 12: Translation Y - Back/Max
+    if (!skipCalibration) {
+        Output.setSpeedLCD("TRANSLATION Y", "BACK (Max)");
+        Output.setAltitudeLCD("Any CAG=Calib", "MOD=Skip to Ctr");
+        Output.update();
+        
+        skipCalibration = waitForAnyButton();
+        if (!skipCalibration) {
+            transYCalMax = Input.getTranslationYAxis();
+            Output.setAltitudeLCD("Max: " + String(transYCalMax), "Recorded!");
+            Output.update();
+            delay(1000);
+        }
+    }
+    
+    // Step 13: Translation Z - Down/Min
+    if (!skipCalibration) {
+        Output.setSpeedLCD("TRANSLATION Z", "DOWN (Min)");
+        Output.setAltitudeLCD("Any CAG=Calib", "MOD=Skip to Ctr");
+        Output.update();
+        
+        skipCalibration = waitForAnyButton();
+        if (!skipCalibration) {
+            transZCalMin = Input.getTranslationZAxis();
+            Output.setAltitudeLCD("Min: " + String(transZCalMin), "Recorded!");
+            Output.update();
+            delay(1000);
+        }
+    }
+    
+    // Step 14: Translation Z - Up/Max
+    if (!skipCalibration) {
+        Output.setSpeedLCD("TRANSLATION Z", "UP (Max)");
+        Output.setAltitudeLCD("Any CAG=Calib", "MOD=Skip to Ctr");
+        Output.update();
+        
+        skipCalibration = waitForAnyButton();
+        if (!skipCalibration) {
+            transZCalMax = Input.getTranslationZAxis();
+            Output.setAltitudeLCD("Max: " + String(transZCalMax), "Recorded!");
+            Output.update();
+            delay(1000);
+        }
+    }
+    
+    // Step 15: Center calibration - ALWAYS REQUIRED
+    Output.setSpeedLCD("CENTER", "CALIBRATION");
+    Output.setAltitudeLCD("Release all", "joysticks");
+    Output.setHeadingLCD("DON'T TOUCH!", "");
+    Output.setInfoLCD("Press any CAG", "when ready");
+    Output.update();
+    delay(3000);
+    
+    waitForAnyButton();
+    
+    rotXCalCenter = Input.getRotationXAxis();
+    rotYCalCenter = Input.getRotationYAxis();
+    rotZCalCenter = Input.getRotationZAxis();
+    transXCalCenter = Input.getTranslationXAxis();
+    transYCalCenter = Input.getTranslationYAxis();
+    transZCalCenter = Input.getTranslationZAxis();
+    
+    Output.setAltitudeLCD("Centers:", "Recorded!");
+    Output.setHeadingLCD("Rot: " + String(rotXCalCenter) + "," + String(rotYCalCenter) + "," + String(rotZCalCenter), "");
+    Output.setInfoLCD("Trn: " + String(transXCalCenter) + "," + String(transYCalCenter) + "," + String(transZCalCenter), "");
+    Output.update();
+    delay(3000);
+    
+    // Calibration complete
+    Output.setSpeedLCD("CALIBRATION", "COMPLETE!");
+    Output.setAltitudeLCD("Starting", "Simpit...");
+    Output.setHeadingLCD("", "");
+    Output.setInfoLCD("", "");
+    Output.setDirectionLCD("", "");
+    Output.update();
+    delay(2000);
+}
+
 void initSimpit()
 {
     //Output.setSpeedLCD("Waiting for KSP", "");
@@ -515,10 +1029,6 @@ void initSimpit()
     Output.setInfoLCD("Waiting for Simpit", "");
     Output.setDirectionLCD("Waiting for Simpit", "");
     Output.update();
-    while (!mySimpit.init()) {
-        delay(100);
-        Output.update();
-    }
     while (!mySimpit.init()) {
         delay(100);
         Output.update();
@@ -661,6 +1171,14 @@ void waitForUserCorrection(byte input, bool desiredState, String switchName)
 }
 void refresh()
 {
+    // Joystick debugging mode: when debug switch AND autopilot switch are both ON
+    if (Input.getVirtualPin(VPIN_DEBUG_SWITCH, false) == ON && 
+        Input.getVirtualPin(VPIN_AUTO_PILOT_SWITCH, false) == ON)
+    {
+        debugJoysticks();
+        return; // Exit refresh early in debug mode1111111111111111111111111111111
+    }
+    
     // Check flight status to determine which controls are active
     bool inFlight = flightStatusMsg.isInFlight();
     bool inEVA = flightStatusMsg.isInEVA();
@@ -1070,16 +1588,15 @@ void myCallbackHandler(byte messageType, byte msg[], byte msgSize)
             bool crewCountChanged = (lastCrewCount != 255 && flightStatusMsg.crewCount != lastCrewCount);
             
             // Trigger vessel change on: initial load OR vessel type/crew changed
-            // Only trigger if connected and in flight
-            if (isConnectedToKSP && flightStatusMsg.isInFlight() && 
+            // Only trigger if connected, initialization complete, and in flight
+            if (isConnectedToKSP && initializationComplete && flightStatusMsg.isInFlight() && 
                 (isFirstLoad || vesselTypeChanged || crewCountChanged))
             {
                 // Vessel changed! Pause the game
                 mySimpit.update();
                 vesselChange();
             }
-            
-            // Update last known vessel properties
+                    // Update last known vessel properties
             lastVesselStage = flightStatusMsg.currentStage;
             lastVesselType = flightStatusMsg.vesselType;
             lastCrewCount = flightStatusMsg.crewCount;
@@ -1147,6 +1664,10 @@ void refreshMod()
 {
     // Track button state to send press/release as modifier key (Right Shift)
     static bool lastEnableState = false;
+    static unsigned long modPressStartTime = 0;
+    static bool vesselChangeTriggered = false;
+    const unsigned long FORCE_VESSEL_CHANGE_DURATION = 10000;  // 10 seconds
+    
     bool currentEnableState = (Input.getVirtualPin(VPIN_MOD_BUTTON, false) == ON);
     
     if (currentEnableState && !lastEnableState) // Button just pressed
@@ -1154,12 +1675,26 @@ void refreshMod()
         printDebug("Mod pressed - Right Shift down");
         keyboardEmulatorMessage msgPress(0xA1, 1);  // Right Shift key - press
         mySimpit.send(KEYBOARD_EMULATOR, msgPress);
+        modPressStartTime = millis();
+        vesselChangeTriggered = false;
     }
     else if (!currentEnableState && lastEnableState) // Button just released
     {
         printDebug("Mod released - Right Shift up");
         keyboardEmulatorMessage msgRelease(0xA1, 2);  // Right Shift key - release
         mySimpit.send(KEYBOARD_EMULATOR, msgRelease);
+        vesselChangeTriggered = false;
+    }
+    else if (currentEnableState && !vesselChangeTriggered) // Button held
+    {
+        // Check if held for 10 seconds
+        if (millis() - modPressStartTime >= FORCE_VESSEL_CHANGE_DURATION)
+        {
+            vesselChangeTriggered = true;
+            printDebug("Force vessel change - MOD held 10 seconds");
+            mySimpit.printToKSP("Force vessel change!", PRINT_TO_SCREEN);
+            vesselChange();
+        }
     }
     
     lastEnableState = currentEnableState;
@@ -1174,6 +1709,8 @@ void updateDirectionMode()
         VPIN_DIRECTION_MODE_9, VPIN_DIRECTION_MODE_10, VPIN_DIRECTION_MODE_11, VPIN_DIRECTION_MODE_12
     };
     
+    byte oldMode = directionMode;
+    
     // Check which of the 12 direction mode positions is active
     for (int i = 0; i < 12; i++) 
     {
@@ -1181,6 +1718,15 @@ void updateDirectionMode()
         if (state == ON) 
         {
             directionMode = i + 1;  // Mode is 1-12, array index is 0-11
+            
+            // Reset easter egg if mode changed away from 12
+            if (oldMode == 12 && directionMode != 12)
+            {
+                easterEggActive = false;
+                easterEggAbortCount = 0;
+                easterEggPosition = 0;
+            }
+            
             break;
         }
     }
@@ -1336,7 +1882,19 @@ void setGearWarning()
 }
 void setWarpWarning()
 {
-    Output.setLED(WARP_WARNING_LED, flightStatusMsg.currentTWIndex > 1);
+    byte warpIndex = flightStatusMsg.currentTWIndex;
+    
+    if (warpIndex <= 1)  // 1x time warp or slower
+    {
+        Output.setLED(WARP_WARNING_LED, false);
+    }
+    else  // 2x, 4x, 10x, etc.
+    {
+        // Blink at rate proportional to warp index: 2x=2Hz, 4x=4Hz, etc.
+        // Convert Hz to milliseconds: period = 1000ms / (warpIndex * 2) for 50% duty cycle
+        unsigned long blinkPeriod = 1000 / warpIndex;
+        Output.setLED(WARP_WARNING_LED, (millis() / blinkPeriod) % 2);
+    }
 }
 void setCommsWarning()
 {
@@ -1507,7 +2065,22 @@ void refreshAbort()
         if (Input.getVirtualPin(VPIN_ABORT_BUTTON) == ON)
         {
             printDebug("Abort button pressed");
-            mySimpit.activateAction(ABORT_ACTION);
+            
+            // Easter egg: Count abort presses when in direction mode 12
+            if (directionMode == 12)
+            {
+                easterEggAbortCount++;
+                if (easterEggAbortCount >= 5)
+                {
+                    easterEggActive = true;
+                    easterEggPosition = 0;
+                    lastEasterEggUpdate = millis();
+                }
+            }
+            else
+            {
+                mySimpit.activateAction(ABORT_ACTION);
+            }
         }
     }
     else if (abortLock == OFF)
@@ -1773,7 +2346,7 @@ void refreshNav()
 }
 void refreshUI()
 {
-    if (Input.getVirtualPin(VPIN_UI_BUTTON) == ON)
+    if (Input.getVirtualPin(VPIN_UI_BUTTON) == OFF)
     {
         printDebug("UI Toggled");
         keyboardEmulatorMessage msg(0x71);  // F2
@@ -1979,6 +2552,10 @@ void refreshGrab()
             
             mySimpit.printToKSP("Precision: " + String((int)(precisionModifier * 100)) + "%", PRINT_TO_SCREEN);
             printDebug("Precision decreased to " + String((int)(precisionModifier * 100)) + "%");
+            
+            // Trigger precision display overlay
+            precisionDisplayActive = true;
+            precisionDisplayStartTime = millis();
         }
     }
     
@@ -2009,6 +2586,10 @@ void refreshBoard()
             
             mySimpit.printToKSP("Precision: " + String((int)(precisionModifier * 100)) + "%", PRINT_TO_SCREEN);
             printDebug("Precision increased to " + String((int)(precisionModifier * 100)) + "%");
+            
+            // Trigger precision display overlay
+            precisionDisplayActive = true;
+            precisionDisplayStartTime = millis();
         }
     }
 }
@@ -2086,17 +2667,17 @@ void refreshThrottle()
     if (Input.getVirtualPin(VPIN_THROTTLE_LOCK_SWITCH, false) == ON)
     {
         int axis = Input.getThrottleAxis();
-        // overflow protection
-        if (axis < MIN_THROTTLE_POS) axis = MIN_THROTTLE_POS;
-        if (axis > MAX_THROTTLE_POS) axis = MAX_THROTTLE_POS;
+        // overflow protection using calibrated values
+        if (axis < throttleCalMin) axis = throttleCalMin;
+        if (axis > throttleCalMax) axis = throttleCalMax;
         
         // Apply deadzone at minimum (snap to 0)
-        if (axis < (MIN_THROTTLE_POS + THROTTLE_DEADZONE))
+        if (axis < (throttleCalMin + THROTTLE_DEADZONE))
         {
             lastThrottle = 0;
         }
         // Apply deadzone at maximum (snap to 100%)
-        else if (axis > (MAX_THROTTLE_POS - THROTTLE_DEADZONE))
+        else if (axis > (throttleCalMax - THROTTLE_DEADZONE))
         {
             lastThrottle = INT16_MAX;
         }
@@ -2104,8 +2685,8 @@ void refreshThrottle()
         {
             // Map with adjusted range (excluding deadzones)
             lastThrottle = map(axis, 
-                              MIN_THROTTLE_POS + THROTTLE_DEADZONE, 
-                              MAX_THROTTLE_POS - THROTTLE_DEADZONE, 
+                              throttleCalMin + THROTTLE_DEADZONE, 
+                              throttleCalMax - THROTTLE_DEADZONE, 
                               0, INT16_MAX);
         }
         
@@ -2182,8 +2763,9 @@ void refreshTranslation()
 
     // Trim button - add current joystick position to existing trim (accumulative)
     // Use false parameter for immediate response without waiting for state change
+    // NOTE: Button logic is inverted (hardware reports ON when released)
     static bool lastTransTrimState = false;
-    bool currentTransTrimState = (Input.getVirtualPin(VPIN_TRANS_HOLD_BUTTON, false) == ON);
+    bool currentTransTrimState = (Input.getVirtualPin(VPIN_TRANS_HOLD_BUTTON, false) == OFF); // INVERTED
     
     if (currentTransTrimState && !lastTransTrimState) // Detect rising edge (button just pressed)
     {
@@ -2192,9 +2774,9 @@ void refreshTranslation()
         int y = Input.getTranslationYAxis();
         int z = Input.getTranslationZAxis();
         
-        int16_t newTrimX = smoothAndMapAxis(x, true);
-        int16_t newTrimY = smoothAndMapAxis(y, false);
-        int16_t newTrimZ = smoothAndMapAxis(z, true);
+        int16_t newTrimX = mapTranslationX(x);
+        int16_t newTrimY = mapTranslationY(y);
+        int16_t newTrimZ = mapTranslationZ(z);
         
         if (Input.getVirtualPin(VPIN_PRECISION_SWITCH, false) == ON)
         {
@@ -2226,8 +2808,9 @@ void refreshTranslation()
     lastTransTrimState = currentTransTrimState;
     
     // Reset button clears trim
+    // NOTE: Button logic is inverted (hardware reports ON when released)
     static bool lastTransResetState = false;
-    bool currentTransResetState = (Input.getVirtualPin(VPIN_TRANS_RESET_BUTTON, false) == ON);
+    bool currentTransResetState = (Input.getVirtualPin(VPIN_TRANS_RESET_BUTTON, false) == OFF); // INVERTED
     
     if (currentTransResetState && !lastTransResetState) // Detect rising edge
     {
@@ -2283,9 +2866,9 @@ void refreshTranslation()
     int y = Input.getTranslationYAxis();
     int z = Input.getTranslationZAxis();
 
-    int16_t transX = smoothAndMapAxis(x, true);
-    int16_t transY = smoothAndMapAxis(y, false);
-    int16_t transZ = smoothAndMapAxis(z, true);
+    int16_t transX = mapTranslationX(x);
+    int16_t transY = mapTranslationY(y);
+    int16_t transZ = mapTranslationZ(z);
 
     if (Input.getVirtualPin(VPIN_PRECISION_SWITCH, false) == ON)
     {
@@ -2317,7 +2900,7 @@ void refreshTranslation()
         return;
 
     translationMessage transMsg;
-    transMsg.setXYZ(transX, transZ, transY);
+    transMsg.setXYZ(transX, transY, transZ);  // Swapped Y and Z
     if (isConnectedToKSP) mySimpit.send(TRANSLATION_MESSAGE, transMsg);
 }
 
@@ -2455,8 +3038,9 @@ void refreshRotation()
         return; // EVA so exit
     }
     
+    // NOTE: Button logic is inverted (hardware reports ON when released)
     static bool lastRotTrimState = false;
-    bool currentRotTrimState = (Input.getVirtualPin(VPIN_ROT_HOLD_BUTTON, false) == ON);
+    bool currentRotTrimState = (Input.getVirtualPin(VPIN_ROT_HOLD_BUTTON, false) == OFF); // INVERTED
     
     if (currentRotTrimState && !lastRotTrimState) // Detect rising edge (button just pressed)
     {
@@ -2465,9 +3049,9 @@ void refreshRotation()
         int y = Input.getRotationYAxis();
         int z = Input.getRotationZAxis();
         
-        int16_t newTrimX = smoothAndMapAxis(x, true);
-        int16_t newTrimY = smoothAndMapAxis(y, true);
-        int16_t newTrimZ = smoothAndMapAxis(z, false);
+        int16_t newTrimX = mapRotationX(x);
+        int16_t newTrimY = mapRotationY(y);
+        int16_t newTrimZ = mapRotationZ(z);
         
         if (Input.getVirtualPin(VPIN_PRECISION_SWITCH, false) == ON)
         {
@@ -2499,8 +3083,9 @@ void refreshRotation()
     lastRotTrimState = currentRotTrimState;
     
     // Reset button clears trim
+    // NOTE: Button logic is inverted (hardware reports ON when released)
     static bool lastRotResetState = false;
-    bool currentRotResetState = (Input.getVirtualPin(VPIN_ROT_RESET_BUTTON, false) == ON);
+    bool currentRotResetState = (Input.getVirtualPin(VPIN_ROT_RESET_BUTTON, false) == OFF); // INVERTED
     
     if (currentRotResetState && !lastRotResetState) // Detect rising edge
     {
@@ -2526,9 +3111,9 @@ void refreshRotation()
     int z = Input.getRotationZAxis();
     
 
-    int16_t x1 = smoothAndMapAxis(x, true);
-    int16_t y1 = smoothAndMapAxis(y, true);
-    int16_t z1 = smoothAndMapAxis(z, false);
+    int16_t x1 = mapRotationX(x);
+    int16_t y1 = mapRotationY(y);
+    int16_t z1 = mapRotationZ(z);
 
     int16_t rotX;
     int16_t rotY;
@@ -2732,6 +3317,17 @@ void setAltitudeLCD()
     
     String topTxt = "";
     String botTxt = "";
+
+    // Check if precision display overlay is active
+    if (precisionDisplayActive)
+    {
+        topTxt = "PRECISION MODE";
+        int precisionPercent = (int)(precisionModifier * 100);
+        botTxt = String(precisionPercent) + "%";
+        
+        Output.setAltitudeLCD(topTxt, botTxt);
+        return;
+    }
 
     // Top line: SOI name
     String soiName = (soi.length() > 0) ? soi : "Unknown";
@@ -3064,8 +3660,7 @@ void setInfoLCD()
             break;
         }
 
-        case 10:  // Landing Time Estimate
-            topTxt = "Landing Time";
+        case 10:  // Time-To-Impact and estimated distance
             {
                 float verticalSpeed = velocityMsg.vertical;
                 float surfaceAlt = altitudeMsg.surface;
@@ -3074,21 +3669,34 @@ void setInfoLCD()
                 if (verticalSpeed < -1.0 && surfaceAlt > 0)
                 {
                     // Time to impact = altitude / abs(vertical speed)
-                    int timeToLanding = (int)(surfaceAlt / -verticalSpeed);
-                    int minutes = timeToLanding / 60;
-                    int seconds = timeToLanding % 60;
+                    int timeToImpact = (int)(surfaceAlt / -verticalSpeed);
+                    int minutes = timeToImpact / 60;
+                    int seconds = timeToImpact % 60;
                     
+                    // Top line: Time-To-Impact
+                    topTxt = "Time-To-Impact ";
                     if (minutes > 0)
-                        botTxt = String(minutes) + "m " + String(seconds) + "s";
+                        topTxt += String(minutes) + "m" + String(seconds) + "s";
                     else
-                        botTxt = String(seconds) + "s";
+                        topTxt += String(seconds) + "s";
+                    
+                    // Bottom line: Estimated distance traveled during descent
+                    float horizontalSpeed = velocityMsg.surface;
+                    // Remove vertical component to get true horizontal speed
+                    float vertSpeed = abs(verticalSpeed);
+                    float trueHorizontalSpeed = sqrt(max(0.0f, horizontalSpeed * horizontalSpeed - vertSpeed * vertSpeed));
+                    float estimatedDistance = trueHorizontalSpeed * timeToImpact;
+                    
+                    botTxt = "Est-Dist " + formatDistance(estimatedDistance);
                 }
                 else if (verticalSpeed >= 0)
                 {
+                    topTxt = "Time-To-Impact";
                     botTxt = "Ascending";
                 }
                 else
                 {
+                    topTxt = "Time-To-Impact";
                     botTxt = "On Ground";
                 }
             }
@@ -3297,10 +3905,50 @@ void setDirectionLCD()
             }
             Output.setDirectionLCD(topTxt, botTxt);
             return;
-        case 12:  // Unused
-            topTxt = "Direction 12";
-            botTxt = "Unused";
-            Output.setDirectionLCD(topTxt, botTxt);
+        case 12:  // Easter egg mode
+            if (easterEggActive)
+            {
+                // Animate 8==D~~ scrolling across screen
+                if (millis() - lastEasterEggUpdate >= EASTER_EGG_ANIMATION_SPEED)
+                {
+                    lastEasterEggUpdate = millis();
+                    easterEggPosition++;
+                    if (easterEggPosition > 21)  // Reset after it scrolls off screen (16 + 5 chars)
+                    {
+                        easterEggPosition = 0;
+                    }
+                }
+                
+                // Create scrolling effect
+                String rocket = "8==D  8===D 8=D";
+                int rocketLen = rocket.length();
+                
+                // Top line - rocket scrolls across
+                topTxt = "";
+                for (int i = 0; i < 16; i++)
+                {
+                    int charPos = i - easterEggPosition;
+                    if (charPos >= 0 && charPos < rocketLen)
+                    {
+                        topTxt += rocket[charPos];
+                    }
+                    else
+                    {
+                        topTxt += " ";
+                    }
+                }
+                
+                // Bottom line - stars background
+                botTxt = "8=============D";
+                
+                Output.setDirectionLCD(topTxt, botTxt);
+            }
+            else
+            {
+                topTxt = "Nothing here???";
+                botTxt = "";
+                Output.setDirectionLCD(topTxt, botTxt);
+            }
             return;
         default:
             topTxt = "Direction";
@@ -3328,9 +3976,51 @@ void setDirectionLCD()
 
 
 
-/// <summary>Give the raw analog some smoothing.</summary>
-/// <returns>Returns a smoothed and mapped value.</returns>
-int16_t smoothAndMapAxis(int raw, bool flip)//, bool isSmooth = true)
+/// <summary>Map axis with calibration data</summary>
+/// <returns>Returns a mapped value using calibrated min/center/max.</returns>
+int16_t mapAxisWithCalibration(int raw, int calMin, int calCenter, int calMax, bool flip)
+{
+    // Use value shorter distance as outer range.
+    auto outterVal = abs(calCenter - calMin) < abs(calMax - calCenter) ? abs(calCenter - calMin) : abs(calMax - calCenter);
+    return smoothAndMapAxis(map(raw, calCenter - outterVal, outterVal + calCenter, 0, 1023), flip);
+
+    /*
+    // Check center deadzone first
+    int deadzoneLow = calCenter - JOYSTICK_DEADZONE_CENTER;
+    int deadzoneHigh = calCenter + JOYSTICK_DEADZONE_CENTER;
+    
+    if (raw >= deadzoneLow && raw <= deadzoneHigh)
+    {
+        // Within center deadzone - return zero
+        return 0;
+    }
+
+    // Apply edge deadzone and map the value
+    int minEdge = calMin + JOYSTICK_DEADZONE;
+    int maxEdge = calMax - JOYSTICK_DEADZONE;
+    
+    // Map lower range (min to center) to (INT16_MIN to 0)
+    if (raw < calCenter)
+    {
+        if (raw < minEdge) raw = minEdge;
+        if (raw > deadzoneLow) raw = deadzoneLow;
+        // Raw decreases from center to min, output should go from 0 to INT16_MIN
+        if (!flip) return map(raw, deadzoneLow, minEdge, 0, INT16_MIN);
+        else return map(raw, deadzoneLow, minEdge, 0, INT16_MAX);
+    }
+    // Map upper range (center to max) to (0 to INT16_MAX)
+    else
+    {
+        if (raw < deadzoneHigh) raw = deadzoneHigh;
+        if (raw > maxEdge) raw = maxEdge;
+        // Raw increases from center to max, output should go from 0 to INT16_MAX
+        if (!flip) return map(raw, deadzoneHigh, maxEdge, 0, INT16_MAX);
+        else return map(raw, deadzoneHigh, maxEdge, 0, INT16_MIN);
+    }
+    */
+}
+
+int16_t smoothAndMapAxis(int raw, bool flip)
 {
     // Check center deadzone first
     if (raw > 512 - JOYSTICK_DEADZONE_CENTER && raw < 512 + JOYSTICK_DEADZONE_CENTER)
@@ -3367,6 +4057,13 @@ int16_t smoothAndMapAxis(int raw, bool flip)//, bool isSmooth = true)
         else return map(raw, centerMax, max, 0, INT16_MIN);
     }
 }
+
+int16_t mapRotationX(int raw) { return mapAxisWithCalibration(raw, rotXCalMin, rotXCalCenter, rotXCalMax, true); }
+int16_t mapRotationY(int raw) { return mapAxisWithCalibration(raw, rotYCalMin, rotYCalCenter, rotYCalMax, true); }
+int16_t mapRotationZ(int raw) { return mapAxisWithCalibration(raw, rotZCalMin, rotZCalCenter, rotZCalMax, false); }
+int16_t mapTranslationX(int raw) { return mapAxisWithCalibration(raw, transXCalMin, transXCalCenter, transXCalMax, true); }
+int16_t mapTranslationY(int raw) { return mapAxisWithCalibration(raw, transYCalMin, transYCalCenter, transYCalMax, true); }
+int16_t mapTranslationZ(int raw) { return mapAxisWithCalibration(raw, transZCalMin, transZCalCenter, transZCalMax, true); }
 
 // Helper: shortest signed angle difference (target - current) in degrees (-180..180]
 float shortestAngleDiff(float target, float current)
@@ -3527,6 +4224,125 @@ int16_t dualPlayerHelper(int16_t x1, int16_t x2)
         x = x1 + x2;
     }
     return x;
+}
+
+void debugJoysticks()
+{
+    // Comprehensive joystick debugging - outputs every 500ms
+    if (!joystickDebugTimer.check())
+        return;
+    
+    printDebug("\n========== JOYSTICK DEBUG ==========");
+    
+    // Raw analog values
+    int rotX_raw = Input.getRotationXAxis();
+    int rotY_raw = Input.getRotationYAxis();
+    int rotZ_raw = Input.getRotationZAxis();
+    int transX_raw = Input.getTranslationXAxis();
+    int transY_raw = Input.getTranslationYAxis();
+    int transZ_raw = Input.getTranslationZAxis();
+    int throttle_raw = Input.getThrottleAxis();
+    
+    printDebug("--- RAW ANALOG VALUES (0-1023) ---");
+    printDebug("Rotation  X(Roll): " + String(rotX_raw) + "  Y(Pitch): " + String(rotY_raw) + "  Z(Yaw): " + String(rotZ_raw));
+    printDebug("Translation X(L/R): " + String(transX_raw) + "  Y(F/B): " + String(transY_raw) + "  Z(U/D): " + String(transZ_raw));
+    printDebug("Throttle: " + String(throttle_raw));
+    
+    // Centered values (offset from 512)
+    printDebug("\n--- CENTERED VALUES (offset from 512) ---");
+    printDebug("Rotation  X: " + String(rotX_raw - 512) + "  Y: " + String(rotY_raw - 512) + "  Z: " + String(rotZ_raw - 512));
+    printDebug("Translation X: " + String(transX_raw - 512) + "  Y: " + String(transY_raw - 512) + "  Z: " + String(transZ_raw - 512));
+    
+    // Processed values (after smoothing and mapping)
+    int16_t rotX_proc = mapRotationX(rotX_raw);
+    int16_t rotY_proc = mapRotationY(rotY_raw);
+    int16_t rotZ_proc = mapRotationZ(rotZ_raw);
+    int16_t transX_proc = mapTranslationX(transX_raw);
+    int16_t transY_proc = mapTranslationY(transY_raw);
+    int16_t transZ_proc = mapTranslationZ(transZ_raw);
+    
+    printDebug("\n--- PROCESSED VALUES (INT16: -32768 to 32767) ---");
+    printDebug("Rotation  X: " + String(rotX_proc) + "  Y: " + String(rotY_proc) + "  Z: " + String(rotZ_proc));
+    printDebug("Translation X: " + String(transX_proc) + "  Y: " + String(transY_proc) + "  Z: " + String(transZ_proc));
+    
+    // Deadzone status
+    printDebug("\n--- DEADZONE STATUS (90 units from center) ---");
+    bool rotX_dead = (rotX_raw > (512 - JOYSTICK_DEADZONE) && rotX_raw < (512 + JOYSTICK_DEADZONE));
+    bool rotY_dead = (rotY_raw > (512 - JOYSTICK_DEADZONE) && rotY_raw < (512 + JOYSTICK_DEADZONE));
+    bool rotZ_dead = (rotZ_raw > (512 - JOYSTICK_DEADZONE) && rotZ_raw < (512 + JOYSTICK_DEADZONE));
+    bool transX_dead = (transX_raw > (512 - JOYSTICK_DEADZONE) && transX_raw < (512 + JOYSTICK_DEADZONE));
+    bool transY_dead = (transY_raw > (512 - JOYSTICK_DEADZONE) && transY_raw < (512 + JOYSTICK_DEADZONE));
+    bool transZ_dead = (transZ_raw > (512 - JOYSTICK_DEADZONE) && transZ_raw < (512 + JOYSTICK_DEADZONE));
+    
+    printDebug("Rotation  X: " + String(rotX_dead ? "IN DEADZONE" : "ACTIVE") + 
+               "  Y: " + String(rotY_dead ? "IN DEADZONE" : "ACTIVE") + 
+               "  Z: " + String(rotZ_dead ? "IN DEADZONE" : "ACTIVE"));
+    printDebug("Translation X: " + String(transX_dead ? "IN DEADZONE" : "ACTIVE") + 
+               "  Y: " + String(transY_dead ? "IN DEADZONE" : "ACTIVE") + 
+               "  Z: " + String(transZ_dead ? "IN DEADZONE" : "ACTIVE"));
+    
+    // Current trim values
+    printDebug("\n--- TRIM OFFSETS ---");
+    printDebug("Rotation Trim  X: " + String(trimRotX) + "  Y: " + String(trimRotY) + "  Z: " + String(trimRotZ));
+    printDebug("Translation Trim X: " + String(trimTransX) + "  Y: " + String(trimTransY) + "  Z: " + String(trimTransZ));
+    
+    // Final output values (processed + trim)
+    int16_t rotX_final = rotX_proc + trimRotX;
+    int16_t rotY_final = rotY_proc + trimRotY;
+    int16_t rotZ_final = rotZ_proc + trimRotZ;
+    int16_t transX_final = transX_proc + trimTransX;
+    int16_t transY_final = transY_proc + trimTransY;
+    int16_t transZ_final = transZ_proc + trimTransZ;
+    
+    printDebug("\n--- FINAL OUTPUT (Processed + Trim) ---");
+    printDebug("Rotation  X: " + String(rotX_final) + "  Y: " + String(rotY_final) + "  Z: " + String(rotZ_final));
+    printDebug("Translation X: " + String(transX_final) + "  Y: " + String(transY_final) + "  Z: " + String(transZ_final));
+    
+    // Precision mode
+    bool precisionMode = (Input.getVirtualPin(VPIN_PRECISION_SWITCH, false) == ON);
+    printDebug("\n--- CONTROL MODIFIERS ---");
+    String precMsg = "Precision Mode: " + String(precisionMode ? "ON" : "OFF");
+    if (precisionMode) {
+        precMsg += " (Modifier: " + String(precisionModifier * 100) + "%)";
+    }
+    printDebug(precMsg);
+    
+    // View mode
+    printDebug("View Mode (Translation for camera): " + String(viewModeEnabled ? "ENABLED" : "DISABLED"));
+    
+    // Throttle info
+    printDebug("\n--- THROTTLE INFO ---");
+    printDebug("Raw: " + String(throttle_raw) + "  (Cal Range: " + String(throttleCalMin) + "-" + String(throttleCalMax) + ")");
+    
+    bool throttleLocked = (Input.getVirtualPin(VPIN_THROTTLE_LOCK_SWITCH, false) == ON);
+    printDebug("Throttle Lock: " + String(throttleLocked ? "ON" : "OFF"));
+    
+    if (throttleLocked) {
+        // Calculate percentage
+        float throttlePercent = 0.0;
+        if (throttle_raw < (throttleCalMin + THROTTLE_DEADZONE)) {
+            throttlePercent = 0.0;
+        } else if (throttle_raw > (throttleCalMax - THROTTLE_DEADZONE)) {
+            throttlePercent = 100.0;
+        } else {
+            throttlePercent = map(throttle_raw, 
+                                 throttleCalMin + THROTTLE_DEADZONE,
+                                 throttleCalMax - THROTTLE_DEADZONE,
+                                 0, 100);
+        }
+        printDebug("Throttle Position: " + String(throttlePercent) + "%");
+    }
+    
+    // Button states (INVERTED: hardware reports ON when released)
+    printDebug("\n--- BUTTON STATES ---");
+    printDebug("Rotation Hold/Trim: " + String(Input.getVirtualPin(VPIN_ROT_HOLD_BUTTON, false) == OFF ? "PRESSED" : "Released"));
+    printDebug("Rotation Reset: " + String(Input.getVirtualPin(VPIN_ROT_RESET_BUTTON, false) == OFF ? "PRESSED" : "Released"));
+    printDebug("Translation Hold/Trim: " + String(Input.getVirtualPin(VPIN_TRANS_HOLD_BUTTON, false) == OFF ? "PRESSED" : "Released"));
+    printDebug("Translation Reset: " + String(Input.getVirtualPin(VPIN_TRANS_RESET_BUTTON, false) == OFF ? "PRESSED" : "Released"));
+    printDebug("Translation Button (View Mode Toggle): " + String(Input.getVirtualPin(VPIN_TRANSLATION_BUTTON, false) == ON ? "PRESSED" : "Released"));
+    printDebug("Rotation Button: " + String(Input.getVirtualPin(VPIN_ROTATION_BUTTON, false) == ON ? "PRESSED" : "Released"));
+    
+    printDebug("\n===================================\n");
 }
 
 void printDebug(String msg) 

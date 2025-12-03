@@ -65,7 +65,7 @@ Stream* debugSerial = nullptr;
 /// <param name="referenceToBoolVal">Boolean varaible that holds the real state of the input.</param>
 /// <param name="virtualPin">What index to create this virtual pin at.</param>
 /// <param name="debounce">Debounce for this virtual pin.</param>
-void AddInput(bool& referenceToBoolVal, int virtualPin, int debounce = 100)
+void AddInput(bool& referenceToBoolVal, int virtualPin, int debounce = 50)
 {
     // If the new pin is outside the current array bounds, we need to resize.
     if (virtualPin >= numPins) {
@@ -83,7 +83,7 @@ void AddInput(bool& referenceToBoolVal, int virtualPin, int debounce = 100)
             newPins[i].lastReadingState = false;
             newPins[i].lastDebouncedState = false;
             newPins[i].lastDebounceTime = 0;
-            newPins[i].debounceDelay = 100;
+            newPins[i].debounceDelay = 50;
             newPins[i].hasBeenRead = true;
         }
 
@@ -161,20 +161,20 @@ void initVirtualPins()
 
     for (int i = 0; i < 64; i++)
     {
-        AddInput(_sIA[i], i, 150);
+        AddInput(_sIA[i], i, 40);
     }
     for (int i = 0; i < 16; i++)
     {
-        AddInput(_sIB[i], i + 64, 150);
+        AddInput(_sIB[i], i + 64, 40);
     }
 
-    AddInput(testButton, 80, 150);
-    AddInput(testSwitch, 81, 150);
-    AddInput(translationButton, 82, 150);
-    AddInput(rotationButton, 83, 150);
+    AddInput(testButton, 80, 40);
+    AddInput(testSwitch, 81, 40);
+    AddInput(translationButton, 82, 40);
+    AddInput(rotationButton, 83, 40);
     for (int i = 0; i < 18; i++)
     {
-        AddInput(arduinoPins[i], i + 84, 150);
+        AddInput(arduinoPins[i], i + 84, 40);
     }
 }
 /// <summary>Gets shift register inputs.</summary>
@@ -309,7 +309,7 @@ void InputClass::update()
     delayMicroseconds(20);
     rawRot = analogRead(ROTATION_BUTTON_PIN);
 
-    const int BUTTON_THRESHOLD = 950; // slightly above 3/4 scale to avoid noise
+    const int BUTTON_THRESHOLD = 1000; // slightly above 3/4 scale to avoid noise
     translationButton = rawTrans > BUTTON_THRESHOLD;
     rotationButton = rawRot > BUTTON_THRESHOLD;
 }
