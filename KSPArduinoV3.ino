@@ -296,7 +296,7 @@ bool viewModeEnabled = false;  // Toggle state for translation button view mode
 
 // Trim offsets (added to joystick input)
 int16_t trimTransX = 0;
-int16_t trimTransY = 0;
+int16_t trimTransY = 0;where are defeaulty for skip
 int16_t trimTransZ = 0;
 int16_t trimRotX = 0;
 int16_t trimRotY = 0;  // No default pitch trim
@@ -334,7 +334,7 @@ void setup()
     twoSecondTimer.start(TWO_SECOND_INTERVAL);
     throttleDebugTimer.start(THROTTLE_DEBUG_INTERVAL);
     manualRefreshTimer.start(MANUAL_REFRESH_INTERVAL);
-    // Open up the serial port
+    // Open up the serial port`
     Serial.begin(SERIAL_BAUD_RATE);
     // Init I/O
     initIO();
@@ -2862,12 +2862,21 @@ void setInfoLCD()
         {
             topTxt = "Ap ";
             float apAltMeters = (float)apsidesMsg.apoapsis; // meters
-            String altStr = formatDistance(apAltMeters);
-            // Right-align value area (reserve 13 chars)
-            topTxt += calculateGap(altStr, 13);
-            topTxt += altStr;
+            
+            // Check if apoapsis is valid (>= 0)
+            if (apAltMeters >= 0)
+            {
+                String altStr = formatDistance(apAltMeters);
+                // Right-align value area (reserve 13 chars)
+                topTxt += calculateGap(altStr, 13);
+                topTxt += altStr;
+            }
+            else
+            {
+                topTxt += "N/A";
+            }
 
-            if (apsidesTimeMsg.apoapsis >= 0)
+            if (apsidesTimeMsg.apoapsis >= 0 && apAltMeters >= 0)
             {
                 int timeToAp = apsidesTimeMsg.apoapsis;
                 int hours = timeToAp / 3600;
@@ -2889,11 +2898,20 @@ void setInfoLCD()
         {
             topTxt = "Pe ";
             float peAltMeters = (float)apsidesMsg.periapsis; // meters (can be negative)
-            String altStr = formatDistance(abs(peAltMeters));
-            topTxt += calculateGap(altStr, 13);
-            topTxt += altStr;
+            
+            // Check if periapsis is valid (>= 0)
+            if (peAltMeters >= 0)
+            {
+                String altStr = formatDistance(peAltMeters);
+                topTxt += calculateGap(altStr, 13);
+                topTxt += altStr;
+            }
+            else
+            {
+                topTxt += "N/A";
+            }
 
-            if (apsidesTimeMsg.periapsis >= 0)
+            if (apsidesTimeMsg.periapsis >= 0 && peAltMeters >= 0)
             {
                 int timeToPe = apsidesTimeMsg.periapsis;
                 int hours = timeToPe / 3600;
@@ -3065,7 +3083,7 @@ void setInfoLCD()
         }
 
         case 10:  // Landing Time Estimate
-            topTxt = "Landing Time";
+            topTxt = "Landing Time ";
             {
                 float verticalSpeed = velocityMsg.vertical;
                 float surfaceAlt = altitudeMsg.surface;
