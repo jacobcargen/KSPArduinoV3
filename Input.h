@@ -179,10 +179,10 @@ enum ButtonState
 class InputClass
 {
 private:
-    Stream* debugSerial = nullptr;  // Add this member variable
+    Stream* debugSerial = nullptr;
     
 public:
-	void init(Stream& serial);     // Modified init signature
+	void init(Stream& serial);
 	void update();
     void setAllVPinsReady();
 
